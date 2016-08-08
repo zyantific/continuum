@@ -27,160 +27,20 @@ from __future__ import absolute_import, print_function, division
 
 import sys
 import os
+sys.path.append(os.path.dirname(os.path.realpath(__file__)))
+
+
 import random
 import socket
-import uuid
 import asyncore
-import struct
-import json
-sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 import idaapi
 from idautils import *
 from idc import *
 from PyQt5.QtCore import QTimer
 from PyQt5.QtGui import QGuiApplication
 
-
-class ProtoMixin(object):
-    NET_HDR_FORMAT = '>I'
-    NET_HDR_LEN = struct.calcsize(NET_HDR_FORMAT)
-
-    def __init__(self):
-        self.recv_buf = bytearray()
-
-    def handle_packet(self, packet):
-        pass
-
-    def handle_read(self):
-        self.recv_buf += self.recv(1500)
-        if len(self.recv_buf) < self.NET_HDR_LEN:
-            return
-
-        packet_len, = struct.unpack(
-            self.NET_HDR_FORMAT, 
-            self.recv_buf[:self.NET_HDR_LEN],
-        )
-        if len(self.recv_buf) < packet_len:
-            return
-
-        packet = self.recv_buf[self.NET_HDR_LEN:packet_len + self.NET_HDR_LEN]
-        packet = packet.decode('utf8')
-        packet = json.loads(packet)
-        self.handle_packet(packet)
-        self.recv_buf = self.recv_buf[packet_len + self.NET_HDR_LEN:]
-
-    def send_packet(self, packet):
-        packet = json.dumps(packet)
-        packet = packet.encode('utf8')
-        self.send(struct.pack(self.NET_HDR_FORMAT, len(packet)))
-        self.send(packet)
-
-
-class Server(ProtoMixin, asyncore.dispatcher_with_send):
-    def __init__(self, sock, factory):
-        asyncore.dispatcher_with_send.__init__(self, sock=sock)
-        ProtoMixin.__init__(self)
-        self.factory = factory
-        self.guid = None
-        self.input_file = None
-        self.factory.clients.add(self)
-
-    def handle_close(self):
-        self.factory.clients.remove(self)
-        asyncore.dispatcher_with_send.handle_close(self)
-
-    def handle_packet(self, packet):
-        trans_kind = packet['kind']
-        if trans_kind == 'new_client':
-            self.guid = packet['guid']
-            self.input_file = packet['input_file']
-            print("[{}] claimed file '{}'".format(self.guid, self.input_file))
-        elif trans_kind == 'broadcast':
-            packet['src'] = self.guid
-            for cur_client in self.factory.clients:
-                if cur_client == self:
-                    continue
-                cur_client.send_packet(packet)
-        elif trans_kind == 'directed_msg':
-            packet['src'] = self.guid
-            for cur_client in self.factory.clients:
-                if cur_client.guid == packet['dst']:
-                    cur_client.send_packet(packet)
-                    break
-        else:
-            print("Received packet of unknown transport kind '{}'.".format(trans_kind))
-            return
-
-
-class ServerFactory(asyncore.dispatcher):
-    def __init__(self, port):
-        asyncore.dispatcher.__init__(self)
-        self.clients = set()
-        self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.set_reuse_addr()
-        self.bind(('127.0.0.1', port))
-        self.listen(5)
-
-    def handle_accept(self):
-        pair = self.accept()
-        if pair is not None:
-            sock, addr = pair
-            print("Connection from {!r}".format(addr))
-            server = Server(sock, self)
-            print(id(server))
-
-
-class Client(ProtoMixin, asyncore.dispatcher):
-    def __init__(self, sock):
-        asyncore.dispatcher.__init__(self, sock=sock)
-        ProtoMixin.__init__(self)
-        self.guid = uuid.uuid4()
-
-        self.send_packet({
-            'kind': 'broadcast',
-            'msg': {
-                'kind': 'new_client',
-                'guid': str(self.guid),
-                'input_file': GetInputFile(),
-            },
-        }) 
-
-
-    def handle_packet(self, packet):
-        trans_kind = packet['kind']
-        if trans_kind in ('broadcast', 'directed_msg'):
-            msg = packet['msg']
-            handler = getattr(self, 'handle_msg_' + msg['kind'], None)
-            if handler is None:
-                print("Received packet of unknown kind '{}'".format(msg['kind']))
-                return
-
-            try:
-                print('CLIENT RECVED: {!r}'.format(msg))
-                handler(**msg)
-            except TypeError as exc:
-                print("Received invalid arguments for packet: " + str(exc))
-        else:
-            print("Received packet of unknown transport kind '{}'.".format(trans_kind))
-
-    def handle_msg_focus_by_symbol(self, symbol, **_):
-        for i in xrange(GetEntryPointQty()):
-            ordinal = GetEntryOrdinal(i)
-            if GetEntryName(ordinal) == symbol:
-                Jump(GetEntryPoint(ordinal))
-                break
-
-    def handle_msg_new_client(self, **_):
-        pass  # dont care
-    
-    def send_focus_by_symbol(self, symbol):
-        self.send_packet({
-            'kind': 'broadcast',
-            'msg': {
-                'kind': 'focus_by_symbol',
-                'symbol': symbol,
-            },
-        })
+from .server import ServerFactory
+from .client import Client
 
 
 class Continuum(idaapi.plugin_t):
