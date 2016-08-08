@@ -38,11 +38,15 @@ import idaapi
 from idautils import *
 from idc import *
 from PyQt5.QtCore import QTimer
+from PyQt5.QtGui import QGuiApplication
 
 
 class ProtoMixin(object):
     NET_HDR_FORMAT = '>I'
     NET_HDR_LEN = struct.calcsize(NET_HDR_FORMAT)
+
+    def __init__(self):
+        self.recv_buf = bytearray()
 
     def handle_packet(self, packet):
         pass
@@ -63,10 +67,11 @@ class ProtoMixin(object):
         packet = packet.decode('utf8')
         packet = json.loads(packet)
         self.handle_packet(packet)
-        self.recv_buf = self.recv_buf[packet_len:]
+        self.recv_buf = self.recv_buf[packet_len + self.NET_HDR_LEN:]
 
     def send_packet(self, packet):
-        packet = json.dumps(packet).encode('utf8')
+        packet = json.dumps(packet)
+        packet = packet.encode('utf8')
         self.send(struct.pack(self.NET_HDR_FORMAT, len(packet)))
         self.send(packet)
 
@@ -74,8 +79,8 @@ class ProtoMixin(object):
 class Server(ProtoMixin, asyncore.dispatcher_with_send):
     def __init__(self, sock, factory):
         asyncore.dispatcher_with_send.__init__(self, sock=sock)
+        ProtoMixin.__init__(self)
         self.factory = factory
-        self.recv_buf = bytearray()
         self.guid = None
         self.input_file = None
         self.factory.clients.add(self)
@@ -85,25 +90,25 @@ class Server(ProtoMixin, asyncore.dispatcher_with_send):
         asyncore.dispatcher_with_send.handle_close(self)
 
     def handle_packet(self, packet):
-        kind = packet['kind']
-        if kind == 'new_client':
+        trans_kind = packet['kind']
+        if trans_kind == 'new_client':
             self.guid = packet['guid']
             self.input_file = packet['input_file']
             print("[{}] claimed file '{}'".format(self.guid, self.input_file))
-        elif kind == 'broadcast':
+        elif trans_kind == 'broadcast':
             packet['src'] = self.guid
             for cur_client in self.factory.clients:
                 if cur_client == self:
                     continue
                 cur_client.send_packet(packet)
-        elif kind == 'directed_msg':
+        elif trans_kind == 'directed_msg':
             packet['src'] = self.guid
             for cur_client in self.factory.clients:
                 if cur_client.guid == packet['dst']:
                     cur_client.send_packet(packet)
                     break
         else:
-            print("Received packet of unknown kind '{}'.".format(kind))
+            print("Received packet of unknown transport kind '{}'.".format(trans_kind))
             return
 
 
@@ -121,14 +126,15 @@ class ServerFactory(asyncore.dispatcher):
         if pair is not None:
             sock, addr = pair
             print("Connection from {!r}".format(addr))
-            Server(sock, self)
+            server = Server(sock, self)
+            print(id(server))
 
 
 class Client(ProtoMixin, asyncore.dispatcher):
     def __init__(self, sock):
         asyncore.dispatcher.__init__(self, sock=sock)
+        ProtoMixin.__init__(self)
         self.guid = uuid.uuid4()
-        self.recv_buf = bytearray()
 
         self.send_packet({
             'kind': 'broadcast',
@@ -136,12 +142,45 @@ class Client(ProtoMixin, asyncore.dispatcher):
                 'kind': 'new_client',
                 'guid': str(self.guid),
                 'input_file': GetInputFile(),
-            }
-        })
+            },
+        }) 
+
 
     def handle_packet(self, packet):
-        print('RECVED PACKET:')
-        print(repr(packet))
+        trans_kind = packet['kind']
+        if trans_kind in ('broadcast', 'directed_msg'):
+            msg = packet['msg']
+            handler = getattr(self, 'handle_msg_' + msg['kind'], None)
+            if handler is None:
+                print("Received packet of unknown kind '{}'".format(msg['kind']))
+                return
+
+            try:
+                print('CLIENT RECVED: {!r}'.format(msg))
+                handler(**msg)
+            except TypeError as exc:
+                print("Received invalid arguments for packet: " + str(exc))
+        else:
+            print("Received packet of unknown transport kind '{}'.".format(trans_kind))
+
+    def handle_msg_focus_by_symbol(self, symbol, **_):
+        for i in xrange(GetEntryPointQty()):
+            ordinal = GetEntryOrdinal(i)
+            if GetEntryName(ordinal) == symbol:
+                Jump(GetEntryPoint(ordinal))
+                break
+
+    def handle_msg_new_client(self, **_):
+        pass  # dont care
+    
+    def send_focus_by_symbol(self, symbol):
+        self.send_packet({
+            'kind': 'broadcast',
+            'msg': {
+                'kind': 'focus_by_symbol',
+                'symbol': symbol,
+            },
+        })
 
 
 class Continuum(idaapi.plugin_t):
@@ -181,6 +220,15 @@ class Continuum(idaapi.plugin_t):
             sock.connect(('127.0.0.1', server_port))
             self.client = Client(sock)
 
+    def register_hotkeys(self):
+        def follow_extrn():
+            ea = ScreenEA()
+            if GetSegmentAttr(ea, SEGATTR_TYPE) != SEG_XTRN:
+                return
+            self.client.send_focus_by_symbol(Name(ea))
+
+        idaapi.add_hotkey('Shift+F', follow_extrn)
+
     def init(self):
         print('[continuum] v0.0.0 by athre0z (zyantific.com) loaded!')
 
@@ -193,6 +241,7 @@ class Continuum(idaapi.plugin_t):
             os.mkdir(self.continuum_dir)
 
         self.create_or_join_network()
+        self.register_hotkeys()
 
         def beat():
             asyncore.loop(count=1, timeout=0)
@@ -206,6 +255,7 @@ class Continuum(idaapi.plugin_t):
 
         # We hack our timer into the idaapi module to prevent it from being GCed.
         idaapi._dirty_hack_continuum_timer = timer
+        idaapi.continuum = self
 
         return idaapi.PLUGIN_OK
 
