@@ -29,6 +29,8 @@ import json
 
 
 class ProtoMixin(object):
+    """Mixin implementing a simple length-prefixed packet JSON protocol."""
+
     NET_HDR_FORMAT = '>I'
     NET_HDR_LEN = struct.calcsize(NET_HDR_FORMAT)
 
@@ -36,7 +38,21 @@ class ProtoMixin(object):
         self.recv_buf = bytearray()
 
     def handle_packet(self, packet):
-        pass
+        handler = getattr(self, 'handle_msg_' + packet['kind'], None)
+        if handler is None:
+            print("Received packet of unknown kind '{}'".format(packet['kind']))
+            return
+
+        print('{} RECVED: {!r}'.format(self.__class__.__name__, packet))
+        if type(packet) != dict or any(type(x) != unicode for x in packet.keys()):
+            print("Received malformed packet.")
+            return
+
+        try:
+            handler(**packet)
+        except TypeError as exc:
+            print("Received invalid arguments for packet: " + str(exc))
+            return
 
     def handle_read(self):
         self.recv_buf += self.recv(1500)
@@ -51,13 +67,11 @@ class ProtoMixin(object):
             return
 
         packet = self.recv_buf[self.NET_HDR_LEN:packet_len + self.NET_HDR_LEN]
-        packet = packet.decode('utf8')
-        packet = json.loads(packet)
+        packet = json.loads(packet.decode('utf8'))
         self.handle_packet(packet)
         self.recv_buf = self.recv_buf[packet_len + self.NET_HDR_LEN:]
 
     def send_packet(self, packet):
-        packet = json.dumps(packet)
-        packet = packet.encode('utf8')
+        packet = json.dumps(packet).encode('utf8')
         self.send(struct.pack(self.NET_HDR_FORMAT, len(packet)))
         self.send(packet)

@@ -53,13 +53,15 @@ class SymbolIndex(object):
             );
 
             CREATE TABLE export (
-                ida         INTEGER PRIMARY KEY,
+                id          INTEGER PRIMARY KEY,
                 binary_id   INTEGER NOT NULL,
                 name        TEXT NOT NULL,
                 FOREIGN KEY(binary_id) REFERENCES binary(id)
                     ON UPDATE CASCADE
                     ON DELETE CASCADE
             );
+
+            CREATE INDEX idx_export_name ON export(name);
         """)
         self.db.commit()
 
@@ -97,3 +99,13 @@ class SymbolIndex(object):
 
         # All good, flush.
         self.db.commit()
+
+    def find_export(self, symbol):
+        cursor = self.db.cursor()
+        cursor.execute("""
+            SELECT e.id, b.idb_path FROM export e
+            JOIN binary b ON e.binary_id = b.id
+            WHERE e.name = ?
+        """, [symbol])
+        row = cursor.fetchone()
+        return None if row is None else dict(row)

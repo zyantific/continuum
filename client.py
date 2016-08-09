@@ -25,7 +25,6 @@
 from __future__ import absolute_import, print_function, division
 
 import asyncore
-import uuid
 from idc import *
 from idautils import *
 from .proto import ProtoMixin
@@ -35,50 +34,22 @@ class Client(ProtoMixin, asyncore.dispatcher):
     def __init__(self, sock):
         asyncore.dispatcher.__init__(self, sock=sock)
         ProtoMixin.__init__(self)
-        self.guid = uuid.uuid4()
 
         self.send_packet({
-            'kind': 'broadcast',
-            'msg': {
-                'kind': 'new_client',
-                'guid': str(self.guid),
-                'input_file': GetInputFile(),
-            },
+            'kind': 'new_client',
+            'input_file': GetInputFile(),
+            'idb_path': GetIdbPath(),
         })
 
-
-    def handle_packet(self, packet):
-        trans_kind = packet['kind']
-        if trans_kind in ('broadcast', 'directed_msg'):
-            msg = packet['msg']
-            handler = getattr(self, 'handle_msg_' + msg['kind'], None)
-            if handler is None:
-                print("Received packet of unknown kind '{}'".format(msg['kind']))
-                return
-
-            try:
-                print('CLIENT RECVED: {!r}'.format(msg))
-                handler(**msg)
-            except TypeError as exc:
-                print("Received invalid arguments for packet: " + str(exc))
-        else:
-            print("Received packet of unknown transport kind '{}'.".format(trans_kind))
-
-    def handle_msg_focus_by_symbol(self, symbol, **_):
+    def handle_msg_focus_symbol(self, symbol, **_):
         for i in xrange(GetEntryPointQty()):
             ordinal = GetEntryOrdinal(i)
             if GetEntryName(ordinal) == symbol:
                 Jump(GetEntryPoint(ordinal))
                 break
-
-    def handle_msg_new_client(self, **_):
-        pass  # dont care
     
-    def send_focus_by_symbol(self, symbol):
+    def send_focus_symbol(self, symbol):
         self.send_packet({
-            'kind': 'broadcast',
-            'msg': {
-                'kind': 'focus_by_symbol',
-                'symbol': symbol,
-            },
+            'kind': 'focus_symbol',
+            'symbol': symbol,
         })

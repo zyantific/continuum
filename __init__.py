@@ -43,7 +43,7 @@ from idc import *
 from PyQt5.QtCore import QTimer
 from PyQt5.QtGui import QGuiApplication
 
-from .server import ServerFactory
+from .server import Server
 from .client import Client
 from .symbol_index import SymbolIndex
 
@@ -65,7 +65,7 @@ class Continuum(object):
         except socket.error as exc:
             # Nope, create one.
             print('No existing server found, creating new one.')
-            self.server = ServerFactory(self.server_port)
+            self.server = Server(self.server_port, self)
         finally:
             sock.close()
 
@@ -83,7 +83,7 @@ class Continuum(object):
             ea = ScreenEA()
             if GetSegmentAttr(ea, SEGATTR_TYPE) != SEG_XTRN:
                 return
-            self.client.send_focus_by_symbol(Name(ea))
+            self.client.send_focus_symbol(Name(ea))
 
         idaapi.add_hotkey('Shift+F', follow_extrn)
 
@@ -99,12 +99,14 @@ class Continuum(object):
                 yield os.path.join(dirpath, cur_file)
 
     def analyize_project_files(self, files):
-        idaq = sys.executable
         return [subprocess.Popen([
             # TODO: don't hardcode path
-            idaq, '-A', r'-S"C:\Development\continuum\analyze.py"', 
+            sys.executable, '-A', r'-S"C:\Development\continuum\analyze.py"', 
             '-L{}.log'.format(x), x
         ]) for x in files]
+
+    def launch_ida_gui_instance(self, idb_path):
+        return subprocess.Popen([sys.executable, idb_path])
 
     def enable_asyncore_loop(self):
         def beat():
@@ -120,7 +122,7 @@ class Continuum(object):
         self.timer = timer
 
     def disable_asyncore_loop(self):
-        del self.timer
+        self.timer = None
 
     def basic_init(self):
         # Determine continuum data directory.
