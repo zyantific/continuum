@@ -34,6 +34,10 @@ import random
 import socket
 import asyncore
 import idaapi
+import subprocess
+import fnmatch
+import itertools
+import sqlite3
 from idautils import *
 from idc import *
 from PyQt5.QtCore import QTimer
@@ -41,44 +45,38 @@ from PyQt5.QtGui import QGuiApplication
 
 from .server import ServerFactory
 from .client import Client
+from .symbol_index import SymbolIndex
 
 
-class Continuum(idaapi.plugin_t):
-    flags = idaapi.PLUGIN_KEEP
-    comment = "Hurr"
-    help = "This is help"
-    wanted_name = "continuum"
-    wanted_hotkey = 'Alt-F9'
+class Continuum(object):
+    def __init__(self):
+        self.client = None
+        self.server = None
+        self.timer = None
+        self.continuum_dir = None
+        self.server_port = None
+        self.symbol_index = None
 
-    def create_or_join_network(self):
-        server_port_file = os.path.join(self.continuum_dir, 'server_port')
-
-        # Read or define server port.
-        if os.path.exists(server_port_file):
-            with open(server_port_file) as f:
-                server_port = int(f.read())
-        else:
-            server_port = int(random.uniform(10000, 65535))
-            with open(server_port_file, 'w') as f:
-                f.write(str(server_port))
-
+    def create_server_if_none(self):
         # Server alive?
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            sock.connect(('127.0.0.1', server_port))
-            self.client = Client(sock)
+            sock.connect(('127.0.0.1', self.server_port))
         except socket.error as exc:
             # Nope, create one.
-            sock.close()
             print('No existing server found, creating new one.')
-            self.server = ServerFactory(server_port)
+            self.server = ServerFactory(self.server_port)
+        finally:
+            sock.close()
 
-            # Yeah, it's not especially clean to connect to our local server,
-            # but it makes the whole software design and especially server
-            # migration a lot easier.
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.connect(('127.0.0.1', server_port))
+    def create_client(self):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            sock.connect(('127.0.0.1', self.server_port))
             self.client = Client(sock)
+        except socket.error as exc:
+            sock.close()
+            raise Exception("No server found")
 
     def register_hotkeys(self):
         def follow_extrn():
@@ -89,20 +87,26 @@ class Continuum(idaapi.plugin_t):
 
         idaapi.add_hotkey('Shift+F', follow_extrn)
 
-    def init(self):
-        print('[continuum] v0.0.0 by athre0z (zyantific.com) loaded!')
+    def find_project_files(self, path, pattern):
+        patterns = map(str.strip, pattern.split(';'))
+        for dirpath, _, filenames in os.walk(path):
+            relevant_files = itertools.chain.from_iterable(
+                fnmatch.filter(filenames, x) for x in patterns
+            )
 
-        idb_dir = GetIdbDir()
-        self.continuum_dir = os.path.join(idb_dir, '.continuum')
+            # Py2 Y U NO SUPPORT "yield from"? :(
+            for cur_file in relevant_files:
+                yield os.path.join(dirpath, cur_file)
 
-        if not os.path.exists(self.continuum_dir):
-            if os.path.exists(self.continuum_dir):
-                raise Exception("Directory is already an continuum project (wat?)")
-            os.mkdir(self.continuum_dir)
+    def analyize_project_files(self, files):
+        idaq = sys.executable
+        return [subprocess.Popen([
+            # TODO: don't hardcode path
+            idaq, '-A', r'-S"C:\Development\continuum\analyze.py"', 
+            '-L{}.log'.format(x), x
+        ]) for x in files]
 
-        self.create_or_join_network()
-        self.register_hotkeys()
-
+    def enable_asyncore_loop(self):
         def beat():
             asyncore.loop(count=1, timeout=0)
 
@@ -113,18 +117,41 @@ class Continuum(idaapi.plugin_t):
         timer.setInterval(1)
         timer.start()
 
-        # We hack our timer into the idaapi module to prevent it from being GCed.
-        idaapi._dirty_hack_continuum_timer = timer
-        idaapi.continuum = self
+        self.timer = timer
 
-        return idaapi.PLUGIN_OK
+    def disable_asyncore_loop(self):
+        del self.timer
 
-    def run(self, arg):
-        idaapi.msg("run() called with %d!\n" % arg)
+    def basic_init(self):
+        # Determine continuum data directory.
+        idb_dir = GetIdbDir()
+        self.continuum_dir = os.path.join(idb_dir, '.continuum')
+        if not os.path.exists(self.continuum_dir):
+            if os.path.exists(self.continuum_dir):
+                raise Exception("Directory is already an continuum project (wat?)")
+            os.mkdir(self.continuum_dir)
 
-    def term(self):
-        idaapi.msg("term() called!\n")
+        # Read or define server port.
+        server_port_file = os.path.join(self.continuum_dir, 'server_port')
+        if os.path.exists(server_port_file):
+            with open(server_port_file) as f:
+                self.server_port = int(f.read())
+        else:
+            self.server_port = int(random.uniform(10000, 65535))
+            with open(server_port_file, 'w') as f:
+                f.write(str(self.server_port))
+
+        # Initialize symbol index.
+        self.symbol_index = SymbolIndex(self)
+
+    def full_init(self):
+        self.basic_init()
+        self.create_server_if_none()
+        self.create_client()
+        self.register_hotkeys()
+        self.enable_asyncore_loop()
 
 
 def PLUGIN_ENTRY():
-    return Continuum()
+    from .plugin import Plugin
+    return Plugin()

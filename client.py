@@ -44,7 +44,7 @@ class Client(ProtoMixin, asyncore.dispatcher):
                 'guid': str(self.guid),
                 'input_file': GetInputFile(),
             },
-        }) 
+        })
 
 
     def handle_packet(self, packet):
