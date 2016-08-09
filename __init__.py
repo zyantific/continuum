@@ -48,6 +48,30 @@ from .client import Client
 from .symbol_index import SymbolIndex
 
 
+def find_project_files(path, pattern):
+    patterns = [x.strip() for x in pattern.split(';')]
+    for dirpath, _, filenames in os.walk(path):
+        relevant_files = itertools.chain.from_iterable(
+            fnmatch.filter(filenames, x) for x in patterns
+        )
+
+        # Py2 Y U NO SUPPORT "yield from"? :(
+        for cur_file in relevant_files:
+            yield os.path.join(dirpath, cur_file)
+
+
+def analyze_project_files(files):
+    return [subprocess.Popen([
+        # TODO: don't hardcode path
+        sys.executable, '-A', r'-S"C:\Development\continuum\analyze.py"', 
+        '-L{}.log'.format(x), x
+    ]) for x in files]
+
+
+def launch_ida_gui_instance(self, idb_path):
+    return subprocess.Popen([sys.executable, idb_path])
+
+
 class Continuum(object):
     def __init__(self):
         self.client = None
@@ -86,27 +110,6 @@ class Continuum(object):
             self.client.send_focus_symbol(Name(ea))
 
         idaapi.add_hotkey('Shift+F', follow_extrn)
-
-    def find_project_files(self, path, pattern):
-        patterns = map(str.strip, pattern.split(';'))
-        for dirpath, _, filenames in os.walk(path):
-            relevant_files = itertools.chain.from_iterable(
-                fnmatch.filter(filenames, x) for x in patterns
-            )
-
-            # Py2 Y U NO SUPPORT "yield from"? :(
-            for cur_file in relevant_files:
-                yield os.path.join(dirpath, cur_file)
-
-    def analyize_project_files(self, files):
-        return [subprocess.Popen([
-            # TODO: don't hardcode path
-            sys.executable, '-A', r'-S"C:\Development\continuum\analyze.py"', 
-            '-L{}.log'.format(x), x
-        ]) for x in files]
-
-    def launch_ida_gui_instance(self, idb_path):
-        return subprocess.Popen([sys.executable, idb_path])
 
     def enable_asyncore_loop(self):
         def beat():
@@ -152,6 +155,10 @@ class Continuum(object):
         self.create_client()
         self.register_hotkeys()
         self.enable_asyncore_loop()
+
+        from .ui import ProjectCreationDialog
+        self.xxx = ProjectCreationDialog()
+        self.xxx.show()
 
 
 def PLUGIN_ENTRY():

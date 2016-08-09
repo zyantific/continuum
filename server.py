@@ -74,7 +74,8 @@ class ClientConnection(ProtoMixin, asyncore.dispatcher_with_send):
         # Nope, put message into backlog and launch a fresh idaq.
         else:
             self.server.queue_delayed_packet(idb_path, packet)
-            self.core.launch_ida_gui_instance(idb_path)
+            from . import launch_ida_gui_instance
+            launch_ida_gui_instance(idb_path)
 
 
 class Server(asyncore.dispatcher):
@@ -96,7 +97,7 @@ class Server(asyncore.dispatcher):
         if pair is not None:
             sock, addr = pair
             print("Connection from {!r}".format(addr))
-            server = ClientConnection(sock, self)
+            ClientConnection(sock, self)
 
     def update_idb_client_map(self):
         self.idb_client_map = {
