@@ -35,7 +35,6 @@ class Client(ProtoMixin, asyncore.dispatcher_with_send):
         asyncore.dispatcher_with_send.__init__(self, sock=sock)
         ProtoMixin.__init__(self)
         self.core = core
-        self.become_host_on_dc = False
         self.idb_path = GetIdbPath()
 
         self.send_packet({
@@ -49,9 +48,6 @@ class Client(ProtoMixin, asyncore.dispatcher_with_send):
     def handle_close(self):
         asyncore.dispatcher_with_send.handle_close(self)
         print("[continuum] Connection lost, reconnecting.")
-        if self.become_host_on_dc:
-            print("[continuum] We were elected as host.")
-            self.core.create_server_if_none()
         self.core.create_client()
 
     def handle_msg_focus_symbol(self, symbol, **_):
@@ -62,7 +58,8 @@ class Client(ProtoMixin, asyncore.dispatcher_with_send):
                 break
 
     def handle_msg_become_host(self, **_):
-        self.become_host_on_dc = True
+        print("[continuum] We were elected as host.")
+        self.core.create_server_if_none()
     
     def send_focus_symbol(self, symbol):
         self.send_packet({

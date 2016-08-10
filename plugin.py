@@ -50,9 +50,8 @@ class Plugin(idaapi.plugin_t):
         print("[continuum] No fancy action hidden here, yet!")
 
     def term(self):
-        # Are we server? Initiate host migration.
-        if self.core.server:
-            self.core.server.migrate_host_and_close()
+        if self.core.client:
+            self.core.close_project()
 
         self.core.disable_asyncore_loop()
-        print("[continuum] plugin unloaded.")
+        print("[continuum] Plugin unloaded.")

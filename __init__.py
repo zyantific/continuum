@@ -48,7 +48,7 @@ from .client import Client
 from .symbol_index import SymbolIndex
 
 
-def find_meta_directory(start_path):
+def find_cont_directory(start_path):
     tail = object()
     head = start_path
     while tail:
@@ -122,6 +122,9 @@ class Continuum(object):
 
         idaapi.add_hotkey('Shift+F', follow_extrn)
 
+    def unregister_hotkeys(self):
+        pass  # TODO
+
     def enable_asyncore_loop(self):
         def beat():
             asyncore.loop(count=1, timeout=0)
@@ -138,6 +141,37 @@ class Continuum(object):
     def disable_asyncore_loop(self):
         self.timer = None
 
+    def open_project(self):
+        print("[continuum] Opening project.")
+
+        self.create_server_if_none()
+        self.create_client()
+        self.enable_asyncore_loop()
+        self.register_hotkeys()
+
+    def close_project(self):
+        print("[continuum] Closing project.")
+
+        self.unregister_hotkeys()
+        self.disable_asyncore_loop()
+        
+        # Are we server? Initiate host migration.
+        if self.server:
+            self.server.migrate_host_and_shutdown()
+            self.server = None
+
+        self.client.close()
+        self.client = None
+
+    def _handle_open_idb(self, _, is_old_database):
+        # Is IDB part of a continuum project?
+        cont_dir = find_cont_directory(GetIdbDir())
+        if cont_dir:
+            self.open_project()
+
+    def _handle_close_idb(self, _):
+        self.close_project()
+
     def read_or_generate_server_port(self, force_fresh=False):
         server_port_file = os.path.join(self.continuum_dir, 'server_port')
         if not force_fresh and os.path.exists(server_port_file):
@@ -151,8 +185,7 @@ class Continuum(object):
 
     def basic_init(self):
         # Determine continuum data directory.
-        idb_dir = GetIdbDir()
-        self.continuum_dir = os.path.join(idb_dir, '.continuum')
+        self.continuum_dir = os.path.join(GetIdbDir(), '.continuum')
         if not os.path.exists(self.continuum_dir):
             if os.path.exists(self.continuum_dir):
                 raise Exception("Directory is already an continuum project (wat?)")
@@ -163,10 +196,15 @@ class Continuum(object):
 
     def full_init(self):
         self.basic_init()
-        self.create_server_if_none()
-        self.create_client()
-        self.register_hotkeys()
-        self.enable_asyncore_loop()
+
+        # Sign up for events.
+        idaapi.notify_when(idaapi.NW_OPENIDB, self._handle_open_idb)
+        idaapi.notify_when(idaapi.NW_CLOSEIDB, self._handle_close_idb)
+
+        # Alright, is an IDB loaded? Pretend IDB open event as we miss the callback
+        # when it was loaded before our plugin was staged.
+        if GetIdbPath():
+            self._handle_open_idb(None, None)
 
         #from .ui import ProjectCreationDialog
         #self.xxx = ProjectCreationDialog()

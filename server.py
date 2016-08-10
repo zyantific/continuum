@@ -89,7 +89,7 @@ class Server(asyncore.dispatcher):
         self._delayed_packets = defaultdict(list)
 
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
-        #self.set_reuse_addr()
+        self.set_reuse_addr()
         self.bind(('127.0.0.1', port))
         self.listen(5)
 
@@ -113,7 +113,7 @@ class Server(asyncore.dispatcher):
         for cur_packet in self._delayed_packets[client.idb_path]:
             client.send_packet(cur_packet)
 
-    def migrate_host_and_close(self):
+    def migrate_host_and_shutdown(self):
         # Any other client online? Migrate host.
         host_candidates = [x for x in self.clients if x.idb_path != self.core.client.idb_path]
         if host_candidates:
@@ -121,4 +121,9 @@ class Server(asyncore.dispatcher):
             elected_client = next(iter(host_candidates))
             elected_client.send_packet({'kind': 'become_host'})
 
+        # Close server socket.
         self.close()
+
+        # Disconnect clients.
+        for cur_client in self.clients:
+            cur_client.close()
