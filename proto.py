@@ -43,7 +43,7 @@ class ProtoMixin(object):
             print("Received packet of unknown kind '{}'".format(packet['kind']))
             return
 
-        print('{} RECVED: {!r}'.format(self.__class__.__name__, packet))
+        print("[continuum] {} RECVED: {!r}".format(self.__class__.__name__, packet))
         if type(packet) != dict or any(type(x) != unicode for x in packet.keys()):
             print("Received malformed packet.")
             return

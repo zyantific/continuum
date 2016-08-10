@@ -30,10 +30,13 @@ from idautils import *
 from .proto import ProtoMixin
 
 
-class Client(ProtoMixin, asyncore.dispatcher):
-    def __init__(self, sock):
-        asyncore.dispatcher.__init__(self, sock=sock)
+class Client(ProtoMixin, asyncore.dispatcher_with_send):
+    def __init__(self, sock, core):
+        asyncore.dispatcher_with_send.__init__(self, sock=sock)
         ProtoMixin.__init__(self)
+        self.core = core
+        self.become_host_on_dc = False
+        self.idb_path = GetIdbPath()
 
         self.send_packet({
             'kind': 'new_client',
@@ -41,12 +44,25 @@ class Client(ProtoMixin, asyncore.dispatcher):
             'idb_path': GetIdbPath(),
         })
 
+        print("[continuum] Connected.")
+
+    def handle_close(self):
+        asyncore.dispatcher_with_send.handle_close(self)
+        print("[continuum] Connection lost, reconnecting.")
+        if self.become_host_on_dc:
+            print("[continuum] We were elected as host.")
+            self.core.create_server_if_none()
+        self.core.create_client()
+
     def handle_msg_focus_symbol(self, symbol, **_):
         for i in xrange(GetEntryPointQty()):
             ordinal = GetEntryOrdinal(i)
             if GetEntryName(ordinal) == symbol:
                 Jump(GetEntryPoint(ordinal))
                 break
+
+    def handle_msg_become_host(self, **_):
+        self.become_host_on_dc = True
     
     def send_focus_symbol(self, symbol):
         self.send_packet({

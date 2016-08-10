@@ -45,6 +45,7 @@ class ClientConnection(ProtoMixin, asyncore.dispatcher_with_send):
     def handle_close(self):
         self.server.clients.remove(self)
         self.server.update_idb_client_map()
+        print("[continuum] A client disconnected.")
         asyncore.dispatcher_with_send.handle_close(self)
 
     def handle_msg_new_client(self, input_file, idb_path, **_):
@@ -58,7 +59,7 @@ class ClientConnection(ProtoMixin, asyncore.dispatcher_with_send):
     def handle_msg_focus_symbol(self, symbol, **_):
         export = self.core.symbol_index.find_export(symbol)
         if export is None:
-            print("Symbol '{}' not found.".format(symbol))
+            print("[continuum] Symbol '{}' not found.".format(symbol))
             return
 
         packet = {
@@ -88,7 +89,7 @@ class Server(asyncore.dispatcher):
         self._delayed_packets = defaultdict(list)
 
         self.create_socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.set_reuse_addr()
+        #self.set_reuse_addr()
         self.bind(('127.0.0.1', port))
         self.listen(5)
 
@@ -96,7 +97,7 @@ class Server(asyncore.dispatcher):
         pair = self.accept()
         if pair is not None:
             sock, addr = pair
-            print("Connection from {!r}".format(addr))
+            print("[continuum] Connection from {!r}".format(addr))
             ClientConnection(sock, self)
 
     def update_idb_client_map(self):
@@ -111,3 +112,13 @@ class Server(asyncore.dispatcher):
         assert client.idb_path
         for cur_packet in self._delayed_packets[client.idb_path]:
             client.send_packet(cur_packet)
+
+    def migrate_host_and_close(self):
+        # Any other client online? Migrate host.
+        host_candidates = [x for x in self.clients if x.idb_path != self.core.client.idb_path]
+        if host_candidates:
+            self.core.read_or_generate_server_port(force_fresh=True)
+            elected_client = next(iter(host_candidates))
+            elected_client.send_packet({'kind': 'become_host'})
+
+        self.close()

@@ -48,6 +48,16 @@ from .client import Client
 from .symbol_index import SymbolIndex
 
 
+def find_meta_directory(start_path):
+    tail = object()
+    head = start_path
+    while tail:
+        head, tail = os.path.split(head)
+        cur_meta_path = os.path.join(head, tail, '.continuum')
+        if os.path.exists(cur_meta_path):
+            return cur_meta_path
+
+
 def find_project_files(path, pattern):
     patterns = [x.strip() for x in pattern.split(';')]
     for dirpath, _, filenames in os.walk(path):
@@ -68,7 +78,7 @@ def analyze_project_files(files):
     ]) for x in files]
 
 
-def launch_ida_gui_instance(self, idb_path):
+def launch_ida_gui_instance(idb_path):
     return subprocess.Popen([sys.executable, idb_path])
 
 
@@ -78,26 +88,27 @@ class Continuum(object):
         self.server = None
         self.timer = None
         self.continuum_dir = None
-        self.server_port = None
         self.symbol_index = None
 
     def create_server_if_none(self):
         # Server alive?
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_port = self.read_or_generate_server_port()
         try:
-            sock.connect(('127.0.0.1', self.server_port))
+            sock.connect(('127.0.0.1', server_port))
         except socket.error as exc:
             # Nope, create one.
-            print('No existing server found, creating new one.')
-            self.server = Server(self.server_port, self)
+            print("[continuum] Creating server.")
+            self.server = Server(server_port, self)
         finally:
             sock.close()
 
     def create_client(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_port = self.read_or_generate_server_port()
         try:
-            sock.connect(('127.0.0.1', self.server_port))
-            self.client = Client(sock)
+            sock.connect(('127.0.0.1', server_port))
+            self.client = Client(sock, self)
         except socket.error as exc:
             sock.close()
             raise Exception("No server found")
@@ -127,6 +138,17 @@ class Continuum(object):
     def disable_asyncore_loop(self):
         self.timer = None
 
+    def read_or_generate_server_port(self, force_fresh=False):
+        server_port_file = os.path.join(self.continuum_dir, 'server_port')
+        if not force_fresh and os.path.exists(server_port_file):
+            with open(server_port_file) as f:
+                return int(f.read())
+        else:
+            server_port = int(random.uniform(10000, 65535))
+            with open(server_port_file, 'w') as f:
+                f.write(str(server_port))
+            return server_port
+
     def basic_init(self):
         # Determine continuum data directory.
         idb_dir = GetIdbDir()
@@ -135,16 +157,6 @@ class Continuum(object):
             if os.path.exists(self.continuum_dir):
                 raise Exception("Directory is already an continuum project (wat?)")
             os.mkdir(self.continuum_dir)
-
-        # Read or define server port.
-        server_port_file = os.path.join(self.continuum_dir, 'server_port')
-        if os.path.exists(server_port_file):
-            with open(server_port_file) as f:
-                self.server_port = int(f.read())
-        else:
-            self.server_port = int(random.uniform(10000, 65535))
-            with open(server_port_file, 'w') as f:
-                f.write(str(self.server_port))
 
         # Initialize symbol index.
         self.symbol_index = SymbolIndex(self)
@@ -156,9 +168,9 @@ class Continuum(object):
         self.register_hotkeys()
         self.enable_asyncore_loop()
 
-        from .ui import ProjectCreationDialog
-        self.xxx = ProjectCreationDialog()
-        self.xxx.show()
+        #from .ui import ProjectCreationDialog
+        #self.xxx = ProjectCreationDialog()
+        #self.xxx.show()
 
 
 def PLUGIN_ENTRY():
