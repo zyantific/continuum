@@ -36,11 +36,15 @@ Ui_ProjectCreationDialog, ProjectCreationDialogBase = uic.loadUiType(
 
 
 class ProjectCreationDialog(ProjectCreationDialogBase):
-    def __init__(self):
+    def __init__(self, initial_path=None):
         super(ProjectCreationDialog, self).__init__()
 
         self._ui = Ui_ProjectCreationDialog()
         self._ui.setupUi(self)
+
+        if initial_path:
+            self._ui.project_path.setText(os.path.realpath(initial_path))
+            self.update_binary_list()
 
         self._ui.browse_project_path.clicked.connect(self._browse_project_path)
         self._ui.project_path.textChanged.connect(self.update_binary_list)
@@ -63,3 +67,12 @@ class ProjectCreationDialog(ProjectCreationDialogBase):
         for cur_binary in binaries:
             item = QListWidgetItem(cur_binary)
             self._ui.binary_list.addItem(item)
+
+    @property
+    def project_path(self):
+        return self._ui.project_path.text()
+
+    @property
+    def file_patterns(self):
+        return self._ui.file_patterns.text()
+    

@@ -38,7 +38,7 @@ class Plugin(idaapi.plugin_t):
         
     def init(self):
         self.core = Continuum()
-        self.core.full_init()
+        self.core.ui_init()
         
         # Hack ref to plugin core object into idaapi for easy debugging.
         idaapi.continuum = self.core
