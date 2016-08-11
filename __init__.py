@@ -41,7 +41,6 @@ from idautils import *
 from idc import *
 from PyQt5.QtCore import QTimer
 from PyQt5.QtGui import QGuiApplication
-from PyQt5.QtWidgets import QDialog
 
 from .server import Server
 from .client import Client
@@ -90,6 +89,10 @@ class Continuum(object):
         self.continuum_dir = None
         self.symbol_index = None
 
+        # Sign up for events.
+        idaapi.notify_when(idaapi.NW_OPENIDB, self.handle_open_idb)
+        idaapi.notify_when(idaapi.NW_CLOSEIDB, self.handle_close_idb)
+
     def create_server_if_none(self):
         # Server alive?
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -112,18 +115,6 @@ class Continuum(object):
         except socket.error as exc:
             sock.close()
             raise Exception("No server found")
-
-    def register_hotkeys(self):
-        def follow_extrn():
-            ea = ScreenEA()
-            if GetSegmentAttr(ea, SEGATTR_TYPE) != SEG_XTRN:
-                return
-            self.client.send_focus_symbol(Name(ea))
-
-        idaapi.add_hotkey('Shift+F', follow_extrn)
-
-    def unregister_hotkeys(self):
-        pass  # TODO
 
     def enable_asyncore_loop(self):
         def beat():
@@ -149,12 +140,10 @@ class Continuum(object):
         self.create_server_if_none()
         self.create_client()
         self.enable_asyncore_loop()
-        self.register_hotkeys()
 
     def close_project(self):
         print("[continuum] Closing project.")
 
-        self.unregister_hotkeys()
         self.disable_asyncore_loop()
         
         # Are we server? Initiate host migration.
@@ -179,13 +168,13 @@ class Continuum(object):
         # TODO: store file patterns somewhere for future use
         self.open_project(cont_dir)
 
-    def _handle_open_idb(self, _, is_old_database):
+    def handle_open_idb(self, _, is_old_database):
         # Is IDB part of a continuum project?
         cont_dir = find_cont_directory(GetIdbDir())
         if cont_dir:
             self.open_project(cont_dir)
 
-    def _handle_close_idb(self, _):
+    def handle_close_idb(self, _):
         if self.client:
             self.close_project()
 
@@ -200,50 +189,11 @@ class Continuum(object):
                 f.write(str(server_port))
             return server_port
 
-    def open_proj_creation_dialog(self):
-        if self.client:
-            print("[continuum] A project is already opened.")
+    def follow_extern():
+        ea = ScreenEA()
+        if GetSegmentAttr(ea, SEGATTR_TYPE) != SEG_XTRN:
             return
-
-        if not GetIdbPath():
-            print("[continuum] Please load an IDB related to the project first.")
-            return
-
-        from .ui import ProjectCreationDialog
-        dialog = ProjectCreationDialog(GetIdbDir())
-        chosen_action = dialog.exec_()
-
-        if chosen_action == QDialog.Accepted:
-            self.create_project(dialog.project_path, dialog.file_patterns)
-
-    def ui_init(self):
-        # Register menu entry. 
-        # @HR: I really preferred the pre-6.5 mechanic.
-        zelf = self
-        class MenuEntry(idaapi.action_handler_t):
-            def activate(self, ctx):
-                zelf.open_proj_creation_dialog()
-                return 1
-
-            def update(self, ctx):
-                return idaapi.AST_ENABLE_ALWAYS
-
-        action = idaapi.action_desc_t(
-            'continuum_new_project',
-            "New continuum project...",
-            MenuEntry(),
-        )
-        idaapi.register_action(action)
-        idaapi.attach_action_to_menu("File/Open...", 'continuum_new_project', 0)
-
-        # Sign up for events.
-        idaapi.notify_when(idaapi.NW_OPENIDB, self._handle_open_idb)
-        idaapi.notify_when(idaapi.NW_CLOSEIDB, self._handle_close_idb)
-
-        # Alright, is an IDB loaded? Pretend IDB open event as we miss the callback
-        # when it was loaded before our plugin was staged.
-        if GetIdbPath():
-            self._handle_open_idb(None, None)
+        self.client.send_focus_symbol(Name(ea))
 
 
 def PLUGIN_ENTRY():

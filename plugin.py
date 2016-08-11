@@ -27,6 +27,9 @@ from __future__ import absolute_import, print_function, division
 
 import idaapi
 from . import Continuum
+from idautils import *
+from idc import *
+from PyQt5.QtWidgets import QDialog
 
 
 class Plugin(idaapi.plugin_t):
@@ -38,7 +41,7 @@ class Plugin(idaapi.plugin_t):
         
     def init(self):
         self.core = Continuum()
-        self.core.ui_init()
+        self.ui_init()
         
         # Hack ref to plugin core object into idaapi for easy debugging.
         idaapi.continuum = self.core
@@ -55,3 +58,47 @@ class Plugin(idaapi.plugin_t):
 
         self.core.disable_asyncore_loop()
         print("[continuum] Plugin unloaded.")
+
+    def ui_init(self):
+        # Register menu entry. 
+        # @HR: I really preferred the pre-6.5 mechanic.
+        zelf = self
+        class MenuEntry(idaapi.action_handler_t):
+            def activate(self, ctx):
+                zelf.open_proj_creation_dialog()
+                return 1
+
+            def update(self, ctx):
+                return idaapi.AST_ENABLE_ALWAYS
+
+        action = idaapi.action_desc_t(
+            'continuum_new_project',
+            "New continuum project...",
+            MenuEntry(),
+        )
+        idaapi.register_action(action)
+        idaapi.attach_action_to_menu("File/Open...", 'continuum_new_project', 0)
+
+        # Alright, is an IDB loaded? Pretend IDB open event as we miss the callback
+        # when it was loaded before our plugin was staged.
+        if GetIdbPath():
+            self.core.handle_open_idb(None, None)
+
+        # Register hotkeys.
+        idaapi.add_hotkey('Shift+F', self.core.follow_extern)
+
+    def open_proj_creation_dialog(self):
+        if self.core.client:
+            print("[continuum] A project is already opened.")
+            return
+
+        if not GetIdbPath():
+            print("[continuum] Please load an IDB related to the project first.")
+            return
+
+        from .ui import ProjectCreationDialog
+        dialog = ProjectCreationDialog(GetIdbDir())
+        chosen_action = dialog.exec_()
+
+        if chosen_action == QDialog.Accepted:
+            self.core.create_project(dialog.project_path, dialog.file_patterns)
