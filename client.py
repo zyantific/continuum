@@ -24,6 +24,7 @@
 """
 from __future__ import absolute_import, print_function, division
 
+import sys
 import asyncore
 from idc import *
 from idautils import *
@@ -41,6 +42,7 @@ class Client(ProtoMixin, asyncore.dispatcher_with_send):
             'kind': 'new_client',
             'input_file': GetInputFile(),
             'idb_path': GetIdbPath(),
+            'pid': os.getpid(),
         })
 
         print("[continuum] Connected.")
@@ -54,6 +56,7 @@ class Client(ProtoMixin, asyncore.dispatcher_with_send):
         for i in xrange(GetEntryPointQty()):
             ordinal = GetEntryOrdinal(i)
             if GetEntryName(ordinal) == symbol:
+                # `Jump` also focuses the instance.
                 Jump(GetEntryPoint(ordinal))
                 break
 
@@ -66,14 +69,23 @@ class Client(ProtoMixin, asyncore.dispatcher_with_send):
 
     def handle_msg_refresh_project(self, **_):
         pass  # TODO
+
+    def _allow_others_focusing(self):
+        if sys.platform == 'win32':
+            # On Windows, there's a security mechanism preventing other applications
+            # from putting themselves into the foreground unless explicitly permitted.
+            import ctypes
+            ctypes.windll.user32.AllowSetForegroundWindow(-1)
     
     def send_focus_symbol(self, symbol):
+        self._allow_others_focusing()
         self.send_packet({
             'kind': 'focus_symbol',
             'symbol': symbol,
         })
 
     def send_focus_instance(self, idb_path):
+        self._allow_others_focusing()
         self.send_packet({
             'kind': 'focus_instance',
             'idb_path': idb_path,
