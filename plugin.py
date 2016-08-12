@@ -30,10 +30,12 @@ from . import Continuum
 from idautils import *
 from idc import *
 from PyQt5.QtWidgets import QDialog
+from .ui import ProjectExplorerWidget, ProjectCreationDialog
 
 
 class Plugin(idaapi.plugin_t):
     flags = idaapi.PLUGIN_FIX
+
     comment = "Plugin adding multi-binary project support"
     help = comment
     wanted_name = "continuum"
@@ -41,8 +43,16 @@ class Plugin(idaapi.plugin_t):
         
     def init(self):
         self.core = Continuum()
-        self.ui_init()
         
+        zelf = self
+        class Hooks(idaapi.UI_Hooks):
+            def ready_to_run(self, *_):
+                zelf.ui_init()
+                zelf.ui_hook.unhook()
+
+        self.ui_hook = Hooks()
+        self.ui_hook.hook()
+
         # Hack ref to plugin core object into idaapi for easy debugging.
         idaapi.continuum = self.core
 
@@ -79,6 +89,11 @@ class Plugin(idaapi.plugin_t):
         idaapi.register_action(action)
         idaapi.attach_action_to_menu("File/Open...", 'continuum_new_project', 0)
 
+        # Create project file explorer.
+        self.project_explorer = ProjectExplorerWidget()
+        self.project_explorer.Show('continuum project')
+        idaapi.set_dock_pos('continuum project', 'Functions window', idaapi.DP_BOTTOM)
+
         # Alright, is an IDB loaded? Pretend IDB open event as we miss the callback
         # when it was loaded before our plugin was staged.
         if GetIdbPath():
@@ -96,7 +111,6 @@ class Plugin(idaapi.plugin_t):
             print("[continuum] Please load an IDB related to the project first.")
             return
 
-        from .ui import ProjectCreationDialog
         dialog = ProjectCreationDialog(GetIdbDir())
         chosen_action = dialog.exec_()
 

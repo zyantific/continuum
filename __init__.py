@@ -37,6 +37,7 @@ import subprocess
 import fnmatch
 import itertools
 import sqlite3
+import ConfigParser
 from idautils import *
 from idc import *
 from PyQt5.QtCore import QTimer
@@ -135,7 +136,12 @@ class Continuum(object):
     def open_project(self, cont_dir):
         print("[continuum] Opening project.")
 
+        # Read config.
         self.continuum_dir = cont_dir
+        self.project_conf = ConfigParser.SafeConfigParser()
+        if not self.project_conf.read(os.path.join(self.continuum_dir, 'project.conf')):
+            raise Exception("Project is lacking its config file")
+
         self.symbol_index = SymbolIndex(self)
         self.create_server_if_none()
         self.create_client()
@@ -153,19 +159,27 @@ class Continuum(object):
 
         self.client.close()
         self.client = None
+        self.project_conf = None
 
-    def create_project(self, root, file_patterns):
+    def create_project(self, root, file_patterns, sync_types):
         # Create meta directory.
         cont_dir = os.path.join(root, '.continuum')
         if os.path.exists(cont_dir):
             raise Exception("Directory is already a continuum project")
         os.mkdir(cont_dir)
 
-        # Create index.
+        # Create config file.
+        config = ConfigParser.SafeConfigParser()
+        config.add_section('project')
+        config.set('project', 'file_patterns', file_patterns)
+        config.set('project', 'sync_types', sync_types)
+        with open(os.path.join(cont_dir, 'project.conf'), 'w') as f:
+            config.write(f)
+
+        # Create initial index.
         files = find_project_files(root, file_patterns)
         analyze_project_files(files)
 
-        # TODO: store file patterns somewhere for future use
         self.open_project(cont_dir)
 
     def handle_open_idb(self, _, is_old_database):

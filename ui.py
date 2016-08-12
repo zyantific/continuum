@@ -25,13 +25,20 @@
 from __future__ import absolute_import, print_function, division
 
 import os
+import sys
+import sip
 from PyQt5 import uic
+from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QFileDialog, QListWidgetItem
+from idaapi import PluginForm
 
 
 ui_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'ui')
 Ui_ProjectCreationDialog, ProjectCreationDialogBase = uic.loadUiType(
     os.path.join(ui_dir, 'ProjectCreationDialog.ui')
+)
+Ui_ProjectExplorerWidget, ProjectExplorerWidgetBase = uic.loadUiType(
+    os.path.join(ui_dir, 'ProjectExplorer.ui')
 )
 
 
@@ -76,3 +83,18 @@ class ProjectCreationDialog(ProjectCreationDialogBase):
     def file_patterns(self):
         return self._ui.file_patterns.text()
     
+
+class ProjectExplorerWidget(PluginForm):
+    def OnCreate(self, form):
+        self._tform = form
+        self._qwidget = self.FormToPyQtWidget(form, sys.modules[__name__])
+
+        self._ui = Ui_ProjectExplorerWidget()
+        self._ui.setupUi(self._qwidget)
+
+        self._ui.open_project_settings.setIcon(
+            QIcon(os.path.join(ui_dir, 'page_gear.png'))
+        )
+        self._ui.refresh_project_files.setIcon(
+            QIcon(os.path.join(ui_dir, 'arrow_refresh.png'))
+        )
