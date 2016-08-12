@@ -30,16 +30,20 @@ from idc import *
 from idautils import *
 from collections import defaultdict
 from .proto import ProtoMixin
+from PyQt5.QtCore import QObject, pyqtSignal
 
 
 class ClientConnection(ProtoMixin, asyncore.dispatcher_with_send):
     def __init__(self, sock, server):
+        # We need to use old-style init calls here because asyncore 
+        # consists of old-style classes :(
         asyncore.dispatcher_with_send.__init__(self, sock=sock)
         ProtoMixin.__init__(self)
+
         self.input_file = None
         self.idb_path = None
         self.server = server
-        self.core = server.core
+        self.project = server.core.project
         self.server.clients.add(self)
 
     def handle_close(self):
@@ -68,7 +72,7 @@ class ClientConnection(ProtoMixin, asyncore.dispatcher_with_send):
         self.server.process_delayed_packets(self)
 
     def handle_msg_focus_symbol(self, symbol, **_):
-        export = self.core.symbol_index.find_export(symbol)
+        export = self.project.symbol_index.find_export(symbol)
         if export is None:
             print("[continuum] Symbol '{}' not found.".format(symbol))
             return

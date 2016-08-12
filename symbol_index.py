@@ -63,6 +63,18 @@ class SymbolIndex(object):
                     ON DELETE CASCADE
             );
 
+            /*CREATE TABLE xrefs (
+                id          INTEGER PRIMARY KEY,
+                export_id   INTEGER NOT NULL,
+                binary_id   INTEGER NOT NULL,
+                FOREIGN KEY(export_id) REFERENCES export(id)
+                    ON UPDATE CASCADE
+                    ON DELETE CASCADE,
+                FOREIGN KEY(binary_id) REFERENCES binary(id)
+                    ON UPDATE CASCADE
+                    ON DELETE CASCADE
+            );*/
+
             CREATE INDEX idx_export_name ON export(name);
         """)
         self.db.commit()

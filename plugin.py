@@ -137,7 +137,6 @@ class Plugin(idaapi.plugin_t):
             project = Project.create(dialog.project_path, dialog.file_patterns)
             self.core.open_project(project)
 
-
     def refresh_project(self, *_):
         if not self.project_explorer:
             return

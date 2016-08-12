@@ -151,7 +151,7 @@ class Continuum(QObject):
                 f.write(str(server_port))
             return server_port
 
-    def follow_extern():
+    def follow_extern(self):
         ea = ScreenEA()
         if GetSegmentAttr(ea, SEGATTR_TYPE) != SEG_XTRN:
             return

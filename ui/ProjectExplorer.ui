@@ -68,11 +68,6 @@
        <string>File</string>
       </property>
      </column>
-     <column>
-      <property name="text">
-       <string>State</string>
-      </property>
-     </column>
     </widget>
    </item>
   </layout>

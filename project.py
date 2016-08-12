@@ -32,6 +32,7 @@ import itertools
 import ConfigParser
 import fnmatch
 from PyQt5.QtCore import QObject, pyqtSignal
+from idc import *
 
 from .symbol_index import SymbolIndex
 
@@ -72,6 +73,11 @@ class Project(QObject):
         self.files = files
         self.symbol_index = SymbolIndex(self)
 
+        # Is index for *this* IDB built? If not, do so.
+        if not self.symbol_index.is_idb_indexed(GetIdbPath()):
+            self.symbol_index.build_for_this_idb()
+
+        # Analyze other files, if required.
         self._analyze_project_files()
 
     def _analyze_project_files(self):

@@ -30,6 +30,7 @@ from __future__ import absolute_import, print_function, division
 import sys
 import socket
 sys.path.append(r"C:\Development")  # TODO: don't hardcode this
+from continuum import Continuum
 from continuum.project import Project
 
 # Turn on coagulation of data in the final pass of analysis
