@@ -34,48 +34,14 @@ import socket
 import asyncore
 import idaapi
 import subprocess
-import fnmatch
-import itertools
-import sqlite3
-import ConfigParser
 from idautils import *
 from idc import *
-from PyQt5.QtCore import QTimer, pyqtSignal, QObject
+from PyQt5.QtCore import QTimer, QObject, pyqtSignal
 from PyQt5.QtGui import QGuiApplication
 
 from .server import Server
 from .client import Client
-from .symbol_index import SymbolIndex
-
-
-def find_cont_directory(start_path):
-    tail = object()
-    head = start_path
-    while tail:
-        head, tail = os.path.split(head)
-        cur_meta_path = os.path.join(head, tail, '.continuum')
-        if os.path.exists(cur_meta_path):
-            return cur_meta_path
-
-
-def find_project_files(path, pattern):
-    patterns = [x.strip() for x in pattern.split(';')]
-    for dirpath, _, filenames in os.walk(path):
-        relevant_files = itertools.chain.from_iterable(
-            fnmatch.filter(filenames, x) for x in patterns
-        )
-
-        # Py2 Y U NO SUPPORT "yield from"? :(
-        for cur_file in relevant_files:
-            yield os.path.join(dirpath, cur_file)
-
-
-def analyze_project_files(files):
-    return [subprocess.Popen([
-        # TODO: don't hardcode path
-        sys.executable, '-A', r'-S"C:\Development\continuum\analyze.py"', 
-        '-L{}.log'.format(x), x
-    ]) for x in files]
+from .project import Project
 
 
 def launch_ida_gui_instance(idb_path):
@@ -83,16 +49,15 @@ def launch_ida_gui_instance(idb_path):
 
 
 class Continuum(QObject):
-    project_opened = pyqtSignal([str])  # cont_dir: str
+    project_opened = pyqtSignal([Project])
     project_closing = pyqtSignal()
 
     def __init__(self):
         super(Continuum, self).__init__()
 
+        self.project = None
         self.client = None
         self.server = None
-        self.continuum_dir = None
-        self.symbol_index = None
         self._timer = None
 
         # Sign up for events.
@@ -138,21 +103,15 @@ class Continuum(QObject):
     def disable_asyncore_loop(self):
         self._timer = None
 
-    def open_project(self, cont_dir):
+    def open_project(self, project):
         print("[continuum] Opening project.")
 
-        # Read config.
-        self.continuum_dir = cont_dir
-        self.project_conf = ConfigParser.SafeConfigParser()
-        if not self.project_conf.read(os.path.join(self.continuum_dir, 'project.conf')):
-            raise Exception("Project is lacking its config file")
-
-        self.symbol_index = SymbolIndex(self)
+        self.project = project
         self.create_server_if_none()
         self.create_client()
         self.enable_asyncore_loop()
 
-        self.project_opened.emit(cont_dir)
+        self.project_opened.emit(project)
 
     def close_project(self):
         print("[continuum] Closing project.")
@@ -167,40 +126,22 @@ class Continuum(QObject):
 
         self.client.close()
         self.client = None
-        self.project_conf = None
-
-    def create_project(self, root, file_patterns):
-        # Create meta directory.
-        cont_dir = os.path.join(root, '.continuum')
-        if os.path.exists(cont_dir):
-            raise Exception("Directory is already a continuum project")
-        os.mkdir(cont_dir)
-
-        # Create config file.
-        config = ConfigParser.SafeConfigParser()
-        config.add_section('project')
-        config.set('project', 'file_patterns', file_patterns)
-        with open(os.path.join(cont_dir, 'project.conf'), 'w') as f:
-            config.write(f)
-
-        # Create initial index.
-        files = find_project_files(root, file_patterns)
-        analyze_project_files(files)
-
-        self.open_project(cont_dir)
+        self.project = None
 
     def handle_open_idb(self, _, is_old_database):
-        # Is IDB part of a continuum project?
-        cont_dir = find_cont_directory(GetIdbDir())
-        if cont_dir:
-            self.open_project(cont_dir)
+        # Is IDB part of a continuum project? Open it.
+        proj_dir = Project.find_project_dir(GetIdbDir())
+        if proj_dir:
+            project = Project()
+            project.open(proj_dir)
+            self.open_project(project)
 
     def handle_close_idb(self, _):
         if self.client:
             self.close_project()
 
     def read_or_generate_server_port(self, force_fresh=False):
-        server_port_file = os.path.join(self.continuum_dir, 'server_port')
+        server_port_file = os.path.join(self.project.meta_dir, 'server_port')
         if not force_fresh and os.path.exists(server_port_file):
             with open(server_port_file) as f:
                 return int(f.read())

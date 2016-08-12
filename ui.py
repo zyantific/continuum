@@ -33,6 +33,8 @@ from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QFileDialog, QListWidgetItem, QTreeWidgetItem 
 from idaapi import PluginForm
 
+from .project import Project
+
 
 ui_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'ui')
 Ui_ProjectCreationDialog, ProjectCreationDialogBase = uic.loadUiType(
@@ -64,9 +66,7 @@ class ProjectCreationDialog(ProjectCreationDialogBase):
         self._ui.project_path.setText(path)
 
     def update_binary_list(self, *_):
-        from . import find_project_files
-
-        binaries = find_project_files(
+        binaries = Project.find_project_files(
             self._ui.project_path.text(),
             self._ui.file_patterns.text(),
         )
@@ -90,9 +90,12 @@ class ProjectExplorerWidget(QObject, PluginForm):
     refresh_project_clicked = pyqtSignal()
     open_project_settings_clicked = pyqtSignal()
 
-    def __init__(self, core):
+    def __init__(self, project):
         super(ProjectExplorerWidget, self).__init__()
-        self.core = core
+        self.project = project
+        self._tform = None
+        self._qwidget = None
+        self._ui = None
 
     def OnCreate(self, form):
         self._tform = form
@@ -121,23 +124,21 @@ class ProjectExplorerWidget(QObject, PluginForm):
             lambda item, _: self.focus_instance_clicked.emit(item.data(0, Qt.UserRole))
         )
 
-    def update_files(self):
-        if not self.core.continuum_dir:
-            return
+        self.update()
 
-        from . import find_project_files
-        proj_root = os.path.realpath(os.path.join(self.core.continuum_dir, '..'))
-        patterns = self.core.project_conf.get('project', 'file_patterns')
-        files = find_project_files(proj_root, patterns)
-
+    def update(self):
+        # Update files.
         self._ui.project_tree.clear()
         items = []
-        for cur_file in files:
+        for cur_file in self.project.files:
             item = QTreeWidgetItem(None, [
-                os.path.relpath(cur_file, proj_root), 
+                os.path.relpath(cur_file, self.project.proj_dir), 
                 "N/A",
             ])
             item.setData(0, Qt.UserRole, os.path.splitext(cur_file)[0] + '.idb')
             items.append(item)
 
         self._ui.project_tree.insertTopLevelItems(0, items)
+
+        # Update other stuff.
+        self._ui.project_path.setText(self.project.proj_dir)

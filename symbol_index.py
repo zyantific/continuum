@@ -31,8 +31,10 @@ from idc import *
 
 
 class SymbolIndex(object):
-    def __init__(self, core):
-        self.db = sqlite3.connect(os.path.join(core.continuum_dir, 'index.db'))
+    INDEX_DB_NAME = 'index.db'
+
+    def __init__(self, project):
+        self.db = sqlite3.connect(os.path.join(project.meta_dir, self.INDEX_DB_NAME))
         self.db.row_factory = sqlite3.Row
         self.create_schema()
 

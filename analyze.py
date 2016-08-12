@@ -30,7 +30,7 @@ from __future__ import absolute_import, print_function, division
 import sys
 import socket
 sys.path.append(r"C:\Development")  # TODO: don't hardcode this
-from continuum import Continuum, find_cont_directory
+from continuum.project import Project
 
 # Turn on coagulation of data in the final pass of analysis
 SetShortPrm(INF_AF2, GetShortPrm(INF_AF2) | AF2_DODATA)
@@ -39,9 +39,9 @@ Wait()
 
 # Index symbols.
 print("Indexing symbols ...")
-cont = Continuum()
-cont.open_project(find_cont_directory(GetIdbDir()))
-cont.symbol_index.build_for_this_idb()
+proj = Project()
+proj.open(Project.find_project_dir(GetIdbDir()))
+proj.symbol_index.build_for_this_idb()
 
 # Prevent UI from popping up.
 print("All good, exiting.")
