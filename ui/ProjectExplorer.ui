@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>256</width>
-    <height>173</height>
+    <width>217</width>
+    <height>430</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -22,7 +22,7 @@
      <item>
       <widget class="QLabel" name="project_path">
        <property name="text">
-        <string>Project path</string>
+        <string>No project loaded</string>
        </property>
       </widget>
      </item>

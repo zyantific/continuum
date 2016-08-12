@@ -48,6 +48,17 @@ class ClientConnection(ProtoMixin, asyncore.dispatcher_with_send):
         print("[continuum] A client disconnected.")
         asyncore.dispatcher_with_send.handle_close(self)
 
+    def send_or_delay_packet(self, receiver_idb_path, packet):
+        # Is a client for this IDB alive? Just send message.
+        client = self.server.idb_client_map.get(receiver_idb_path)
+        if client:
+            client.send_packet(packet)
+        # Nope, put message into backlog and launch a fresh idaq.
+        else:
+            self.server.queue_delayed_packet(receiver_idb_path, packet)
+            from . import launch_ida_gui_instance
+            launch_ida_gui_instance(receiver_idb_path)
+
     def handle_msg_new_client(self, input_file, idb_path, **_):
         self.input_file = input_file
         self.idb_path = idb_path
@@ -62,21 +73,19 @@ class ClientConnection(ProtoMixin, asyncore.dispatcher_with_send):
             print("[continuum] Symbol '{}' not found.".format(symbol))
             return
 
-        packet = {
+        self.send_or_delay_packet(export['idb_path'], {
             'kind': 'focus_symbol',
             'symbol': symbol,
-        }
+        })
 
-        # Is a client for this IDB alive? Just send message.
-        idb_path = export['idb_path']
-        client = self.server.idb_client_map.get(idb_path)
-        if client:
-            client.send_packet(packet)
-        # Nope, put message into backlog and launch a fresh idaq.
-        else:
-            self.server.queue_delayed_packet(idb_path, packet)
-            from . import launch_ida_gui_instance
-            launch_ida_gui_instance(idb_path)
+    def handle_msg_focus_instance(self, idb_path, **_):
+        self.send_or_delay_packet(idb_path, {'kind': 'focus_instance'})
+
+    def handle_msg_refresh_project(self, **_):
+        for cur_client in self.server.clients:
+            if cur_client == self:
+                continue
+            cur_client.send_packet({'kind': 'refresh_project'})
 
 
 class Server(asyncore.dispatcher):

@@ -28,8 +28,9 @@ import os
 import sys
 import sip
 from PyQt5 import uic
+from PyQt5.QtCore import Qt, pyqtSignal, QObject
 from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QFileDialog, QListWidgetItem
+from PyQt5.QtWidgets import QFileDialog, QListWidgetItem, QTreeWidgetItem 
 from idaapi import PluginForm
 
 
@@ -84,17 +85,59 @@ class ProjectCreationDialog(ProjectCreationDialogBase):
         return self._ui.file_patterns.text()
     
 
-class ProjectExplorerWidget(PluginForm):
+class ProjectExplorerWidget(QObject, PluginForm):
+    focus_instance_clicked = pyqtSignal([str])  # idb_path: str
+    refresh_project_clicked = pyqtSignal()
+    open_project_settings_clicked = pyqtSignal()
+
+    def __init__(self, core):
+        super(ProjectExplorerWidget, self).__init__()
+        self.core = core
+
     def OnCreate(self, form):
         self._tform = form
         self._qwidget = self.FormToPyQtWidget(form, sys.modules[__name__])
 
+        # Setup UI.
         self._ui = Ui_ProjectExplorerWidget()
         self._ui.setupUi(self._qwidget)
 
+        # Load icons.
         self._ui.open_project_settings.setIcon(
             QIcon(os.path.join(ui_dir, 'page_gear.png'))
         )
         self._ui.refresh_project_files.setIcon(
             QIcon(os.path.join(ui_dir, 'arrow_refresh.png'))
         )
+
+        # Subscribe events.
+        self._ui.open_project_settings.clicked.connect(
+            lambda _: self.open_project_settings_clicked.emit()
+        )
+        self._ui.refresh_project_files.clicked.connect(
+            lambda _: self.refresh_project_clicked.emit()
+        )
+        self._ui.project_tree.itemDoubleClicked.connect(
+            lambda item, _: self.focus_instance_clicked.emit(item.data(0, Qt.UserRole))
+        )
+
+    def update_files(self):
+        if not self.core.continuum_dir:
+            return
+
+        from . import find_project_files
+        proj_root = os.path.realpath(os.path.join(self.core.continuum_dir, '..'))
+        patterns = self.core.project_conf.get('project', 'file_patterns')
+        files = find_project_files(proj_root, patterns)
+
+        self._ui.project_tree.clear()
+        items = []
+        for cur_file in files:
+            item = QTreeWidgetItem(None, [
+                os.path.relpath(cur_file, proj_root), 
+                "N/A",
+            ])
+            item.setData(0, Qt.UserRole, os.path.splitext(cur_file)[0] + '.idb')
+            items.append(item)
+
+        self._ui.project_tree.insertTopLevelItems(0, items)

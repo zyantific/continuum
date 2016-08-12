@@ -43,6 +43,8 @@ class Plugin(idaapi.plugin_t):
         
     def init(self):
         self.core = Continuum()
+        self.core.project_opened.connect(self.refresh_project)
+        self.core.project_closing.connect(self.refresh_project)
         
         zelf = self
         class Hooks(idaapi.UI_Hooks):
@@ -90,9 +92,13 @@ class Plugin(idaapi.plugin_t):
         idaapi.attach_action_to_menu("File/Open...", 'continuum_new_project', 0)
 
         # Create project file explorer.
-        self.project_explorer = ProjectExplorerWidget()
-        self.project_explorer.Show('continuum project')
-        idaapi.set_dock_pos('continuum project', 'Functions window', idaapi.DP_BOTTOM)
+        self.project_explorer = ProjectExplorerWidget(self.core)
+        self.project_explorer.Show("continuum project")
+        self.project_explorer.refresh_project_clicked.connect(self.refresh_project)
+        self.project_explorer.focus_instance_clicked.connect(
+            lambda idb_path: self.core.client.send_focus_instance(idb_path)
+        )
+        idaapi.set_dock_pos("continuum project", "Functions window", idaapi.DP_BOTTOM)
 
         # Alright, is an IDB loaded? Pretend IDB open event as we miss the callback
         # when it was loaded before our plugin was staged.
@@ -116,3 +122,10 @@ class Plugin(idaapi.plugin_t):
 
         if chosen_action == QDialog.Accepted:
             self.core.create_project(dialog.project_path, dialog.file_patterns)
+
+    def refresh_project(self, *_):
+        if not self.core.client:
+            return
+
+        self.project_explorer.update_files()
+        self.core.client.send_refresh_project()

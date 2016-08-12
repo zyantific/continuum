@@ -40,7 +40,7 @@ import sqlite3
 import ConfigParser
 from idautils import *
 from idc import *
-from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import QTimer, pyqtSignal, QObject
 from PyQt5.QtGui import QGuiApplication
 
 from .server import Server
@@ -82,13 +82,18 @@ def launch_ida_gui_instance(idb_path):
     return subprocess.Popen([sys.executable, idb_path])
 
 
-class Continuum(object):
+class Continuum(QObject):
+    project_opened = pyqtSignal([str])  # cont_dir: str
+    project_closing = pyqtSignal()
+
     def __init__(self):
+        super(Continuum, self).__init__()
+
         self.client = None
         self.server = None
-        self.timer = None
         self.continuum_dir = None
         self.symbol_index = None
+        self._timer = None
 
         # Sign up for events.
         idaapi.notify_when(idaapi.NW_OPENIDB, self.handle_open_idb)
@@ -128,10 +133,10 @@ class Continuum(object):
         timer.setInterval(1)
         timer.start()
 
-        self.timer = timer
+        self._timer = timer
 
     def disable_asyncore_loop(self):
-        self.timer = None
+        self._timer = None
 
     def open_project(self, cont_dir):
         print("[continuum] Opening project.")
@@ -147,9 +152,12 @@ class Continuum(object):
         self.create_client()
         self.enable_asyncore_loop()
 
+        self.project_opened.emit(cont_dir)
+
     def close_project(self):
         print("[continuum] Closing project.")
 
+        self.project_closing.emit()
         self.disable_asyncore_loop()
         
         # Are we server? Initiate host migration.
@@ -161,7 +169,7 @@ class Continuum(object):
         self.client = None
         self.project_conf = None
 
-    def create_project(self, root, file_patterns, sync_types):
+    def create_project(self, root, file_patterns):
         # Create meta directory.
         cont_dir = os.path.join(root, '.continuum')
         if os.path.exists(cont_dir):
@@ -172,7 +180,6 @@ class Continuum(object):
         config = ConfigParser.SafeConfigParser()
         config.add_section('project')
         config.set('project', 'file_patterns', file_patterns)
-        config.set('project', 'sync_types', sync_types)
         with open(os.path.join(cont_dir, 'project.conf'), 'w') as f:
             config.write(f)
 

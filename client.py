@@ -57,12 +57,27 @@ class Client(ProtoMixin, asyncore.dispatcher_with_send):
                 Jump(GetEntryPoint(ordinal))
                 break
 
+    def handle_msg_focus_instance(self, **_):
+        Jump(ScreenEA())
+
     def handle_msg_become_host(self, **_):
         print("[continuum] We were elected as host.")
         self.core.create_server_if_none()
+
+    def handle_msg_refresh_project(self, **_):
+        pass  # TODO
     
     def send_focus_symbol(self, symbol):
         self.send_packet({
             'kind': 'focus_symbol',
             'symbol': symbol,
         })
+
+    def send_focus_instance(self, idb_path):
+        self.send_packet({
+            'kind': 'focus_instance',
+            'idb_path': idb_path,
+        })
+
+    def send_refresh_project(self):
+        self.send_packet({'kind': 'refresh_project'})
