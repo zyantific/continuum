@@ -72,16 +72,30 @@ class Project(QObject):
         self.files = files
         self.symbol_index = SymbolIndex(self)
 
+        self._analyze_project_files()
+
     def _analyze_project_files(self):
-        # TODO: don't double-analyze binaries.
         plugin_root = os.path.dirname(os.path.realpath(__file__))
-        return [subprocess.Popen([
-            sys.executable,
-            '-A', 
-            '-S"{}"'.format(os.path.join(plugin_root, 'analyze.py')), 
-            '-L{}.log'.format(cur_file), 
-            cur_file,
-        ]) for cur_file in self.files]
+        procs = []
+
+        for cur_file in self.files:
+            # IDB already indexed? Skip.
+            if self.symbol_index.is_idb_indexed(self.file_to_idb(cur_file)):
+                continue
+
+            procs.append(subprocess.Popen([
+                sys.executable,
+                '-A', 
+                '-S"{}"'.format(os.path.join(plugin_root, 'analyze.py')), 
+                '-L{}.log'.format(cur_file), 
+                cur_file,
+            ]))
+
+        return procs
+
+    @staticmethod
+    def file_to_idb(file):
+        return os.path.splitext(file)[0] + '.idb'
 
     @classmethod
     def find_project_dir(cls, start_path):
@@ -129,6 +143,5 @@ class Project(QObject):
         # Create initial index.
         project = Project()
         project.open(root)
-        project._analyze_project_files()
 
         return project

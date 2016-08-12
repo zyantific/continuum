@@ -135,7 +135,7 @@ class ProjectExplorerWidget(QObject, PluginForm):
                 os.path.relpath(cur_file, self.project.proj_dir), 
                 "N/A",
             ])
-            item.setData(0, Qt.UserRole, os.path.splitext(cur_file)[0] + '.idb')
+            item.setData(0, Qt.UserRole, Project.file_to_idb(cur_file))
             items.append(item)
 
         self._ui.project_tree.insertTopLevelItems(0, items)
