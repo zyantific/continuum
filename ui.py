@@ -28,9 +28,9 @@ import os
 import sys
 import sip
 from PyQt5 import uic
-from PyQt5.QtCore import Qt, pyqtSignal, QObject
+from PyQt5.QtCore import Qt, pyqtSignal, QObject, QFileInfo
 from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QFileDialog, QListWidgetItem, QTreeWidgetItem 
+from PyQt5.QtWidgets import QFileDialog, QListWidgetItem, QTreeWidgetItem, QFileIconProvider
 from idaapi import PluginForm
 
 from .project import Project
@@ -130,12 +130,16 @@ class ProjectExplorerWidget(QObject, PluginForm):
         # Update files.
         self._ui.project_tree.clear()
         items = []
+        icon_provider = QFileIconProvider()
+
         for cur_file in self.project.files:
+            file_info = QFileInfo(cur_file)
             item = QTreeWidgetItem(None, [
                 os.path.relpath(cur_file, self.project.proj_dir), 
                 "N/A",
             ])
             item.setData(0, Qt.UserRole, Project.file_to_idb(cur_file))
+            item.setIcon(0, icon_provider.icon(file_info))
             items.append(item)
 
         self._ui.project_tree.insertTopLevelItems(0, items)
