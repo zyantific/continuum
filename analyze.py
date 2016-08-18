@@ -41,7 +41,7 @@ Wait()
 # Index symbols.
 print("Indexing symbols ...")
 proj = Project()
-proj.open(Project.find_project_dir(GetIdbDir()))
+proj.open(Project.find_project_dir(GetIdbDir()), skip_analysis=True)
 proj.symbol_index.build_for_this_idb()
 
 # Prevent UI from popping up.

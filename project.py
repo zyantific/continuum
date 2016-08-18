@@ -49,7 +49,7 @@ class Project(QObject):
         self.meta_dir = None
         self.files = []
 
-    def open(self, root):
+    def open(self, root, skip_analysis=False):
         """Opens an existing project by its root path."""
         if self.proj_dir:
             raise Exception("A project is already opened")
@@ -73,12 +73,13 @@ class Project(QObject):
         self.files = files
         self.symbol_index = SymbolIndex(self)
 
-        # Is index for *this* IDB built? If not, do so.
-        if not self.symbol_index.is_idb_indexed(GetIdbPath()):
-            self.symbol_index.build_for_this_idb()
+        if not skip_analysis:
+            # Is index for *this* IDB built? If not, do so.
+            if not self.symbol_index.is_idb_indexed(GetIdbPath()):
+                self.symbol_index.build_for_this_idb()
 
-        # Analyze other files, if required.
-        self._analyze_project_files()
+            # Analyze other files, if required.
+            self._analyze_project_files()
 
     def _analyze_project_files(self):
         plugin_root = os.path.dirname(os.path.realpath(__file__))
