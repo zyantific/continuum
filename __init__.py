@@ -27,8 +27,6 @@ from __future__ import absolute_import, print_function, division
 
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.realpath(__file__)))
-
 import random
 import socket
 import asyncore
@@ -155,7 +153,12 @@ class Continuum(QObject):
         ea = ScreenEA()
         if GetSegmentAttr(ea, SEGATTR_TYPE) != SEG_XTRN:
             return
-        self.client.send_focus_symbol(Name(ea))
+
+        name = Name(ea)
+        if name.startswith('__imp_'):
+            name = name[6:]
+
+        self.client.send_focus_symbol(name)
 
 
 def PLUGIN_ENTRY():

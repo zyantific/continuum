@@ -29,7 +29,14 @@ from __future__ import absolute_import, print_function, division
 
 import sys
 import socket
-sys.path.append(r"C:\Development")  # TODO: don't hardcode this
+
+sys.path.append(
+    os.path.join(
+        os.path.dirname(os.path.realpath(__file__)), 
+        '..',
+    )
+)
+
 from continuum import Continuum
 from continuum.project import Project
 
@@ -38,10 +45,14 @@ SetShortPrm(INF_AF2, GetShortPrm(INF_AF2) | AF2_DODATA)
 print("Analyzing input file ...")
 Wait()
 
+# Connect to server instance.
+proj = Project()
+cont = Continuum()
+proj.open(Project.find_project_dir(GetIdbDir()), skip_analysis=True)
+cont.open_project(proj)
+
 # Index symbols.
 print("Indexing symbols ...")
-proj = Project()
-proj.open(Project.find_project_dir(GetIdbDir()), skip_analysis=True)
 proj.symbol_index.build_for_this_idb()
 
 # Prevent UI from popping up.

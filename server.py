@@ -91,6 +91,8 @@ class ClientConnection(ProtoMixin, asyncore.dispatcher_with_send):
                 continue
             cur_client.send_packet({'kind': 'refresh_project'})
 
+    def handle_msg_update_analysis_state(self, state, **_):
+        pass
 
 class Server(asyncore.dispatcher):
     def __init__(self, port, core):

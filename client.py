@@ -93,3 +93,9 @@ class Client(ProtoMixin, asyncore.dispatcher_with_send):
 
     def send_refresh_project(self):
         self.send_packet({'kind': 'refresh_project'})
+
+    def send_analysis_state(self, state):
+        self.send_packet({
+            'kind': 'update_analysis_state',
+            'state': state,
+        })
