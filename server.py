@@ -63,6 +63,12 @@ class ClientConnection(ProtoMixin, asyncore.dispatcher_with_send):
             from . import launch_ida_gui_instance
             launch_ida_gui_instance(receiver_idb_path)
 
+    def broadcast_packet(self, packet):
+        for cur_client in self.server.clients:
+            if cur_client == self:
+                continue
+            cur_client.send_packet(packet)
+
     def handle_msg_new_client(self, input_file, idb_path, **_):
         self.input_file = input_file
         self.idb_path = idb_path
@@ -86,13 +92,14 @@ class ClientConnection(ProtoMixin, asyncore.dispatcher_with_send):
         self.send_or_delay_packet(idb_path, {'kind': 'focus_instance'})
 
     def handle_msg_refresh_project(self, **_):
-        for cur_client in self.server.clients:
-            if cur_client == self:
-                continue
-            cur_client.send_packet({'kind': 'refresh_project'})
+        self.broadcast_packet({'kind': 'refresh_project'})
 
     def handle_msg_update_analysis_state(self, state, **_):
-        pass
+        self.broadcast_packet({
+            'kind': 'analysis_state_updated',
+            'client': self.idb_path,
+            'state': state,
+        })
 
 class Server(asyncore.dispatcher):
     def __init__(self, port, core):

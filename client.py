@@ -22,6 +22,7 @@
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE.
 """
+
 from __future__ import absolute_import, print_function, division
 
 import sys
@@ -29,12 +30,17 @@ import asyncore
 from idc import *
 from idautils import *
 from .proto import ProtoMixin
+from PyQt5.QtCore import QObject, pyqtSignal
 
 
-class Client(ProtoMixin, asyncore.dispatcher_with_send):
+class Client(QObject, ProtoMixin, asyncore.dispatcher_with_send):
+    client_analysis_state_updated = pyqtSignal([str, str])  # idb_path, state
+    refresh_project = pyqtSignal()
+
     def __init__(self, sock, core):
         asyncore.dispatcher_with_send.__init__(self, sock=sock)
         ProtoMixin.__init__(self)
+        QObject.__init__(self)
         self.core = core
         self.idb_path = GetIdbPath()
 
@@ -68,7 +74,10 @@ class Client(ProtoMixin, asyncore.dispatcher_with_send):
         self.core.create_server_if_none()
 
     def handle_msg_refresh_project(self, **_):
-        pass  # TODO
+        self.refresh_project.emit()
+
+    def handle_msg_analysis_state_updated(self, client, state, **_):
+        self.client_analysis_state_updated.emit(client, state)
 
     def _allow_others_focusing(self):
         if sys.platform == 'win32':

@@ -29,6 +29,7 @@ from __future__ import absolute_import, print_function, division
 
 import sys
 import socket
+import asyncore
 
 sys.path.append(
     os.path.join(
@@ -40,21 +41,24 @@ sys.path.append(
 from continuum import Continuum
 from continuum.project import Project
 
-# Turn on coagulation of data in the final pass of analysis
-SetShortPrm(INF_AF2, GetShortPrm(INF_AF2) | AF2_DODATA)
-print("Analyzing input file ...")
-Wait()
-
 # Connect to server instance.
 proj = Project()
 cont = Continuum()
 proj.open(Project.find_project_dir(GetIdbDir()), skip_analysis=True)
 cont.open_project(proj)
 
+# Wait for auto-analysis to complete.
+SetShortPrm(INF_AF2, GetShortPrm(INF_AF2) | AF2_DODATA)
+print("Analyzing input file ...")
+cont.client.send_analysis_state('auto-analysis')
+Wait()
+
 # Index symbols.
 print("Indexing symbols ...")
+cont.client.send_analysis_state('indexing')
 proj.symbol_index.build_for_this_idb()
 
 # Prevent UI from popping up.
+cont.client.send_analysis_state('done')
 print("All good, exiting.")
 Exit(0)
