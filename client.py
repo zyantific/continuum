@@ -36,6 +36,7 @@ from PyQt5.QtCore import QObject, pyqtSignal
 class Client(QObject, ProtoMixin, asyncore.dispatcher_with_send):
     client_analysis_state_updated = pyqtSignal([str, str])  # idb_path, state
     refresh_project = pyqtSignal()
+    sync_types = pyqtSignal()
 
     def __init__(self, sock, core):
         asyncore.dispatcher_with_send.__init__(self, sock=sock)
@@ -79,7 +80,11 @@ class Client(QObject, ProtoMixin, asyncore.dispatcher_with_send):
     def handle_msg_analysis_state_updated(self, client, state, **_):
         self.client_analysis_state_updated.emit(client, state)
 
-    def _allow_others_focusing(self):
+    def handle_msg_sync_types(self, **_):
+        self.sync_types.emit()
+
+    @staticmethod
+    def _allow_others_focusing():
         if sys.platform == 'win32':
             # On Windows, there's a security mechanism preventing other applications
             # from putting themselves into the foreground unless explicitly permitted.
@@ -108,3 +113,6 @@ class Client(QObject, ProtoMixin, asyncore.dispatcher_with_send):
             'kind': 'update_analysis_state',
             'state': state,
         })
+
+    def send_sync_types(self):
+        self.send_packet({'kind': 'sync_types'})

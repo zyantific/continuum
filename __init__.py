@@ -26,7 +26,6 @@
 from __future__ import absolute_import, print_function, division
 
 import sys
-import os
 import random
 import socket
 import asyncore
@@ -35,7 +34,6 @@ import subprocess
 from idautils import *
 from idc import *
 from PyQt5.QtCore import QTimer, QObject, pyqtSignal
-from PyQt5.QtGui import QGuiApplication
 
 from .server import Server
 from .client import Client
@@ -49,6 +47,7 @@ def launch_ida_gui_instance(idb_path):
 class Continuum(QObject):
     project_opened = pyqtSignal([Project])
     project_closing = pyqtSignal()
+    client_created = pyqtSignal([Client])
 
     def __init__(self):
         super(Continuum, self).__init__()
@@ -56,6 +55,7 @@ class Continuum(QObject):
         self.project = None
         self.client = None
         self.server = None
+        self.loop_entered = False
         self._timer = None
 
         # Sign up for events.
@@ -81,19 +81,24 @@ class Continuum(QObject):
         try:
             sock.connect(('127.0.0.1', server_port))
             self.client = Client(sock, self)
-        except socket.error as exc:
+            self.client_created.emit(self.client)
+        except socket.error:
             sock.close()
             raise Exception("No server found")
 
     def enable_asyncore_loop(self):
         def beat():
-            asyncore.loop(count=1, timeout=0)
+            self.loop_entered = True
+            try:
+                asyncore.loop(count=1, timeout=0)
+            finally:
+                self.loop_entered = False
 
-        # Yep, this isn't especially "true async", but it's fine for what we do.
+        # Yep, this isn't especially real-time IO, but it's fine for what we do.
         timer = QTimer()
         timer.timeout.connect(beat)
         timer.setSingleShot(False)
-        timer.setInterval(1)
+        timer.setInterval(15)
         timer.start()
 
         self._timer = timer

@@ -28,12 +28,13 @@
 from __future__ import absolute_import, print_function, division
 
 import sys
-import socket
-import asyncore
+import os
+from idc import *
+from idautils import *
 
 sys.path.append(
     os.path.join(
-        os.path.dirname(os.path.realpath(__file__)), 
+        os.path.dirname(os.path.realpath(__file__)),
         '..',
     )
 )
@@ -53,10 +54,15 @@ print("Analyzing input file ...")
 cont.client.send_analysis_state('auto-analysis')
 Wait()
 
+# Index types.
+print("Indexing types ...")
+cont.client.send_analysis_state('indexing-types')
+proj.symbol_index.index_types_for_this_idb()
+
 # Index symbols.
 print("Indexing symbols ...")
-cont.client.send_analysis_state('indexing')
-proj.symbol_index.build_for_this_idb()
+cont.client.send_analysis_state('indexing-symbols')
+proj.symbol_index.index_symbols_for_this_idb()
 
 # Prevent UI from popping up.
 cont.client.send_analysis_state('done')

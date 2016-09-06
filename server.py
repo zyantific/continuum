@@ -101,6 +101,10 @@ class ClientConnection(ProtoMixin, asyncore.dispatcher_with_send):
             'state': state,
         })
 
+    def handle_msg_sync_types(self, **_):
+        self.broadcast_packet({'kind': 'sync_types'})
+
+
 class Server(asyncore.dispatcher):
     def __init__(self, port, core):
         asyncore.dispatcher.__init__(self)

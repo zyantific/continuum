@@ -25,8 +25,8 @@
 
 from __future__ import absolute_import, print_function, division
 
-import os
 import sqlite3
+import idaapi
 from idc import *
 
 
@@ -63,6 +63,8 @@ class SymbolIndex(object):
                     ON DELETE CASCADE
             );
 
+            CREATE INDEX idx_export_name ON export(name);
+
             /*CREATE TABLE xrefs (
                 id          INTEGER PRIMARY KEY,
                 export_id   INTEGER NOT NULL,
@@ -75,7 +77,12 @@ class SymbolIndex(object):
                     ON DELETE CASCADE
             );*/
 
-            CREATE INDEX idx_export_name ON export(name);
+            CREATE TABLE types (
+              id            INTEGER PRIMARY KEY,
+              name          TEXT NOT NULL UNIQUE,
+              is_fwd_decl   INTEGER NOT NULL,
+              c_type        TEXT NOT NULL
+            );
         """)
         self.db.commit()
 
@@ -84,17 +91,17 @@ class SymbolIndex(object):
         cursor.execute("SELECT id FROM binary WHERE idb_path=?", [idb_path])
         return cursor.fetchone() is not None
 
-    def build_for_this_idb(self):
+    def index_symbols_for_this_idb(self):
         idb_path = GetIdbPath()
         if self.is_idb_indexed(idb_path):
             raise Exception("Cache for this IDB is already built.")
 
         # Create binary record.
         cursor = self.db.cursor()
-        cursor.execute("INSERT INTO binary (idb_path, input_file) VALUES (?, ?)", [
-            idb_path, 
-            GetInputFile(),
-        ])
+        cursor.execute(
+            "INSERT INTO binary (idb_path, input_file) VALUES (?, ?)",
+            [idb_path, GetInputFile()],
+        )
         binary_id = cursor.lastrowid
 
         # Populate index.
@@ -106,13 +113,55 @@ class SymbolIndex(object):
             if name is None:
                 continue
 
-            cursor.execute("INSERT INTO export (binary_id, name) VALUES (?, ?)", [
-                binary_id,
-                name,
-            ])
+            cursor.execute(
+                "INSERT INTO export (binary_id, name) VALUES (?, ?)",
+                [binary_id, name],
+            )
 
         # All good, flush.
         self.db.commit()
+
+    def index_types_for_this_idb(self):
+        cursor = self.db.cursor()
+        cur_named_type = idaapi.first_named_type(
+            idaapi.cvar.idati,
+            idaapi.NTF_TYPE | idaapi.NTF_SYMM
+        )
+
+        while cur_named_type:
+            code, type_str, fields_str, cmt, field_cmts, sclass, value = idaapi.get_named_type64(
+                idaapi.cvar.idati,
+                cur_named_type,
+                idaapi.NTF_TYPE | idaapi.NTF_SYMM,
+            )
+
+            ti = idaapi.tinfo_t()
+            ti.deserialize(idaapi.cvar.idati, type_str, fields_str)
+            c_type = ti._print(
+                cur_named_type,
+                idaapi.PRTYPE_1LINE | idaapi.PRTYPE_TYPE | idaapi.PRTYPE_SEMI,
+                0, 0, None, cmt,
+            )
+
+            # TODO: prefer more concrete type rather than stupidly replacing.
+            cursor.execute(
+                "INSERT OR REPLACE INTO types (name, is_fwd_decl, c_type) VALUES (?, ?, ?)",
+                [cur_named_type, ti.is_forward_decl(), c_type],
+            )
+
+            cur_named_type = idaapi.next_named_type(
+                idaapi.cvar.idati,
+                cur_named_type,
+                idaapi.NTF_TYPE | idaapi.NTF_SYMM,
+            )
+
+        self.db.commit()
+
+    def load_types_into_idb(self):
+        cursor = self.db.cursor()
+        cursor.execute("SELECT * FROM types")
+        for cur_row in cursor.fetchall():
+            idaapi.parse_decls(idaapi.cvar.idati, str(cur_row['c_type']), None, 0)
 
     def find_export(self, symbol):
         cursor = self.db.cursor()

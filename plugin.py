@@ -42,19 +42,41 @@ class Plugin(idaapi.plugin_t):
     help = comment
     wanted_name = "continuum"
     wanted_hotkey = 'Alt-F9'
-        
+
+    def __init__(self):
+        super(Plugin, self).__init__()
+        self.core = None
+        self.project_explorer = None
+        self.idb_hook = None
+        self.ui_hook = None
+
     def init(self):
         self.core = Continuum()
-        self.project_explorer = None
-        
+
+        # Place UI hook so we know when to create our UI stuff.
         zelf = self
-        class Hooks(idaapi.UI_Hooks):
+        class UiHooks(idaapi.UI_Hooks):
             def ready_to_run(self, *_):
                 zelf.ui_init()
                 zelf.ui_hook.unhook()
 
-        self.ui_hook = Hooks()
+        self.ui_hook = UiHooks()
         self.ui_hook.hook()
+
+        # Setup IDP hook for type changes.
+        class IdbHooks(idaapi.IDB_Hooks):
+            def local_types_changed(self, *args):
+                if zelf.core.loop_entered:
+                    return 0
+
+                if zelf.core.client:
+                    zelf.core.project.symbol_index.index_types_for_this_idb()
+                    zelf.core.client.send_sync_types()
+
+                return 0
+
+        self.idb_hook = IdbHooks()
+        self.idb_hook.hook()
 
         # Hack ref to plugin core object into idaapi for easy debugging.
         idaapi.continuum = self.core
@@ -69,6 +91,7 @@ class Plugin(idaapi.plugin_t):
         if self.core.client:
             self.core.close_project()
 
+        self.idb_hook.unhook()
         self.core.disable_asyncore_loop()
         print("[continuum] Plugin unloaded.")
 
@@ -100,13 +123,16 @@ class Plugin(idaapi.plugin_t):
         # Register hotkeys.
         idaapi.add_hotkey('Shift+F', self.core.follow_extern)
 
-        # Sign up for project changes.
+        # Sign up for events.
         self.core.project_opened.connect(self.create_proj_explorer)
         self.core.project_closing.connect(self.close_proj_explorer)
+        self.core.client_created.connect(self.subscribe_client_events)
 
-        # Project already open? Fake event.
+        # Project / client already open? Fake events.
         if self.core.project:
             self.create_proj_explorer(self.core.project)
+        if self.core.client:
+            self.subscribe_client_events(self.core.client)
 
     def create_proj_explorer(self, project):
         self.project_explorer = ProjectExplorerWidget(project)
@@ -120,6 +146,9 @@ class Plugin(idaapi.plugin_t):
     def close_proj_explorer(self):
         self.project_explorer.Close(0)
         self.project_explorer = None
+
+    def subscribe_client_events(self, client):
+        client.sync_types.connect(self.core.project.symbol_index.load_types_into_idb)
 
     def open_proj_creation_dialog(self):
         if self.core.client:

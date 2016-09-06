@@ -25,7 +25,6 @@
 
 from __future__ import absolute_import, print_function, division
 
-import os
 import sys
 import subprocess
 import itertools
@@ -76,7 +75,7 @@ class Project(QObject):
         if not skip_analysis:
             # Is index for *this* IDB built? If not, do so.
             if not self.symbol_index.is_idb_indexed(GetIdbPath()):
-                self.symbol_index.build_for_this_idb()
+                self.symbol_index.index_symbols_for_this_idb()
 
             # Analyze other files, if required.
             self._analyze_project_files()
