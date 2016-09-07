@@ -55,7 +55,6 @@ class Continuum(QObject):
         self.project = None
         self.client = None
         self.server = None
-        self.loop_entered = False
         self._timer = None
 
         # Sign up for events.
@@ -68,7 +67,7 @@ class Continuum(QObject):
         server_port = self.read_or_generate_server_port()
         try:
             sock.connect(('127.0.0.1', server_port))
-        except socket.error as exc:
+        except socket.error:
             # Nope, create one.
             print("[continuum] Creating server.")
             self.server = Server(server_port, self)
@@ -88,11 +87,7 @@ class Continuum(QObject):
 
     def enable_asyncore_loop(self):
         def beat():
-            self.loop_entered = True
-            try:
-                asyncore.loop(count=1, timeout=0)
-            finally:
-                self.loop_entered = False
+            asyncore.loop(count=1, timeout=0)
 
         # Yep, this isn't especially real-time IO, but it's fine for what we do.
         timer = QTimer()
@@ -138,6 +133,7 @@ class Continuum(QObject):
             project = Project()
             project.open(proj_dir)
             self.open_project(project)
+            project.index.sync_types_into_idb()
 
     def handle_close_idb(self, _):
         if self.client:

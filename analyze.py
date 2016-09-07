@@ -57,12 +57,13 @@ Wait()
 # Index types.
 print("Indexing types ...")
 cont.client.send_analysis_state('indexing-types')
-proj.symbol_index.index_types_for_this_idb()
+proj.index.index_types_for_this_idb()
 
 # Index symbols.
 print("Indexing symbols ...")
 cont.client.send_analysis_state('indexing-symbols')
-proj.symbol_index.index_symbols_for_this_idb()
+proj.index.index_symbols_for_this_idb()
+cont.client.send_sync_types(purge_non_indexed=False)
 
 # Prevent UI from popping up.
 cont.client.send_analysis_state('done')

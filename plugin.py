@@ -52,9 +52,9 @@ class Plugin(idaapi.plugin_t):
 
     def init(self):
         self.core = Continuum()
+        zelf = self
 
         # Place UI hook so we know when to create our UI stuff.
-        zelf = self
         class UiHooks(idaapi.UI_Hooks):
             def ready_to_run(self, *_):
                 zelf.ui_init()
@@ -66,13 +66,9 @@ class Plugin(idaapi.plugin_t):
         # Setup IDP hook for type changes.
         class IdbHooks(idaapi.IDB_Hooks):
             def local_types_changed(self, *args):
-                if zelf.core.loop_entered:
-                    return 0
-
-                if zelf.core.client:
-                    zelf.core.project.symbol_index.index_types_for_this_idb()
-                    zelf.core.client.send_sync_types()
-
+                if zelf.core.client and not zelf.core.project.ignore_changes:
+                    zelf.core.project.index.index_types_for_this_idb(purge_locally_deleted=True)
+                    zelf.core.client.send_sync_types(purge_non_indexed=True)
                 return 0
 
         self.idb_hook = IdbHooks()
@@ -148,7 +144,7 @@ class Plugin(idaapi.plugin_t):
         self.project_explorer = None
 
     def subscribe_client_events(self, client):
-        client.sync_types.connect(self.core.project.symbol_index.load_types_into_idb)
+        client.sync_types.connect(self.core.project.index.sync_types_into_idb)
 
     def open_proj_creation_dialog(self):
         if self.core.client:
@@ -157,6 +153,15 @@ class Plugin(idaapi.plugin_t):
 
         if not GetIdbPath():
             print("[continuum] Please load an IDB related to the project first.")
+            return
+
+        # Check if auto-analysis is through prior allowing project creation here.
+        # This probably isn't intended to be done by plugins, but there there seems to be no
+        # official API to check for this that also works when auto-analysis has temporarily
+        # been disabled due to an UI action (specifically here: opening menus).
+        # I found this netnode by reversing IDA.
+        if not idaapi.exist(idaapi.netnode("$ Auto ready")):
+            print("[continuum] Please allow auto-analysis to finish first.")
             return
 
         dialog = ProjectCreationDialog(GetIdbDir())

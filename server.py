@@ -78,7 +78,7 @@ class ClientConnection(ProtoMixin, asyncore.dispatcher_with_send):
         self.server.process_delayed_packets(self)
 
     def handle_msg_focus_symbol(self, symbol, **_):
-        export = self.project.symbol_index.find_export(symbol)
+        export = self.project.index.find_export(symbol)
         if export is None:
             print("[continuum] Symbol '{}' not found.".format(symbol))
             return
@@ -101,8 +101,11 @@ class ClientConnection(ProtoMixin, asyncore.dispatcher_with_send):
             'state': state,
         })
 
-    def handle_msg_sync_types(self, **_):
-        self.broadcast_packet({'kind': 'sync_types'})
+    def handle_msg_sync_types(self, purge_non_indexed, **_):
+        self.broadcast_packet({
+            'kind': 'sync_types',
+            'purge_non_indexed': purge_non_indexed,
+        })
 
 
 class Server(asyncore.dispatcher):

@@ -36,7 +36,7 @@ from PyQt5.QtCore import QObject, pyqtSignal
 class Client(QObject, ProtoMixin, asyncore.dispatcher_with_send):
     client_analysis_state_updated = pyqtSignal([str, str])  # idb_path, state
     refresh_project = pyqtSignal()
-    sync_types = pyqtSignal()
+    sync_types = pyqtSignal([bool])  # purge_non_indexed
 
     def __init__(self, sock, core):
         asyncore.dispatcher_with_send.__init__(self, sock=sock)
@@ -80,8 +80,8 @@ class Client(QObject, ProtoMixin, asyncore.dispatcher_with_send):
     def handle_msg_analysis_state_updated(self, client, state, **_):
         self.client_analysis_state_updated.emit(client, state)
 
-    def handle_msg_sync_types(self, **_):
-        self.sync_types.emit()
+    def handle_msg_sync_types(self, purge_non_indexed, **_):
+        self.sync_types.emit(purge_non_indexed)
 
     @staticmethod
     def _allow_others_focusing():
@@ -114,5 +114,8 @@ class Client(QObject, ProtoMixin, asyncore.dispatcher_with_send):
             'state': state,
         })
 
-    def send_sync_types(self):
-        self.send_packet({'kind': 'sync_types'})
+    def send_sync_types(self, purge_non_indexed):
+        self.send_packet({
+            'kind': 'sync_types',
+            'purge_non_indexed': purge_non_indexed,
+        })

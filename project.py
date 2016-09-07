@@ -33,7 +33,7 @@ import fnmatch
 from PyQt5.QtCore import QObject, pyqtSignal
 from idc import *
 
-from .symbol_index import SymbolIndex
+from .index import Index
 
 
 class Project(QObject):
@@ -43,9 +43,10 @@ class Project(QObject):
     def __init__(self):
         super(Project, self).__init__()
         self.conf = None
-        self.symbol_index = None
+        self.index = None
         self.proj_dir = None
         self.meta_dir = None
+        self.ignore_changes = False
         self.files = []
 
     def open(self, root, skip_analysis=False):
@@ -70,12 +71,13 @@ class Project(QObject):
         self.proj_dir = root
         self.meta_dir = meta_dir
         self.files = files
-        self.symbol_index = SymbolIndex(self)
+        self.index = Index(self)
 
         if not skip_analysis:
             # Is index for *this* IDB built? If not, do so.
-            if not self.symbol_index.is_idb_indexed(GetIdbPath()):
-                self.symbol_index.index_symbols_for_this_idb()
+            if not self.index.is_idb_indexed(GetIdbPath()):
+                self.index.index_types_for_this_idb()
+                self.index.index_symbols_for_this_idb()
 
             # Analyze other files, if required.
             self._analyze_project_files()
@@ -86,7 +88,7 @@ class Project(QObject):
 
         for cur_file in self.files:
             # IDB already indexed? Skip.
-            if self.symbol_index.is_idb_indexed(self.file_to_idb(cur_file)):
+            if self.index.is_idb_indexed(self.file_to_idb(cur_file)):
                 continue
 
             procs.append(subprocess.Popen([

@@ -30,15 +30,37 @@ import idaapi
 from idc import *
 
 
-class SymbolIndex(object):
+class LocalTypesIter(object):
+    """Iterator for local types."""
+    def __init__(self, flags=idaapi.NTF_TYPE | idaapi.NTF_SYMM):
+        self.flags = flags
+        self.cur = idaapi.first_named_type(idaapi.cvar.idati, flags)
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        if self.cur is None:
+            raise StopIteration
+
+        val = self.cur
+        self.cur = idaapi.next_named_type(idaapi.cvar.idati, self.cur, self.flags)
+        return val
+
+
+# noinspection SqlNoDataSourceInspection
+class Index(object):
+    """Central SQLite based index for project-level data."""
     INDEX_DB_NAME = 'index.db'
 
     def __init__(self, project):
         self.db = sqlite3.connect(os.path.join(project.meta_dir, self.INDEX_DB_NAME))
         self.db.row_factory = sqlite3.Row
+        self.project = project
         self.create_schema()
 
     def create_schema(self):
+        """Create DB schema if none exists, yet."""
         cursor = self.db.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='binary'")
 
@@ -87,6 +109,7 @@ class SymbolIndex(object):
         self.db.commit()
 
     def is_idb_indexed(self, idb_path):
+        """Determines whether the IDB is indexed yet."""
         cursor = self.db.cursor()
         cursor.execute("SELECT id FROM binary WHERE idb_path=?", [idb_path])
         return cursor.fetchone() is not None
@@ -121,14 +144,14 @@ class SymbolIndex(object):
         # All good, flush.
         self.db.commit()
 
-    def index_types_for_this_idb(self):
+    def index_types_for_this_idb(self, purge_locally_deleted=False):
+        """Indexes local types from this IDB into the DB."""
         cursor = self.db.cursor()
-        cur_named_type = idaapi.first_named_type(
-            idaapi.cvar.idati,
-            idaapi.NTF_TYPE | idaapi.NTF_SYMM
-        )
 
-        while cur_named_type:
+        # Create or update types.
+        local_types = set()
+        for cur_named_type in LocalTypesIter():
+            local_types.add(cur_named_type)
             code, type_str, fields_str, cmt, field_cmts, sclass, value = idaapi.get_named_type64(
                 idaapi.cvar.idati,
                 cur_named_type,
@@ -149,21 +172,43 @@ class SymbolIndex(object):
                 [cur_named_type, ti.is_forward_decl(), c_type],
             )
 
-            cur_named_type = idaapi.next_named_type(
-                idaapi.cvar.idati,
-                cur_named_type,
-                idaapi.NTF_TYPE | idaapi.NTF_SYMM,
-            )
+        # If requested, remove locally deleted types from index.
+        if purge_locally_deleted:
+            cursor.execute("SELECT id, name FROM types")
+            deleted_types = [x['id'] for x in cursor.fetchall() if x['name'] not in local_types]
+            if deleted_types:
+                print("[continuum] Deleting {} types".format(len(deleted_types)))
+                query_fmt = "DELETE FROM types WHERE id IN ({})"
+                cursor.execute(query_fmt.format(','.join('?' * len(deleted_types))), deleted_types)
 
         self.db.commit()
 
-    def load_types_into_idb(self):
+    def sync_types_into_idb(self, purge_non_indexed=False):
+        """Loads types from the index into this IDB and deletes all orphaned types."""
         cursor = self.db.cursor()
-        cursor.execute("SELECT * FROM types")
-        for cur_row in cursor.fetchall():
-            idaapi.parse_decls(idaapi.cvar.idati, str(cur_row['c_type']), None, 0)
+        self.project.ignore_changes = True
+
+        try:
+            cursor.execute("SELECT name, c_type FROM types")
+            indexed_types = set()
+            for cur_row in cursor.fetchall():
+                idaapi.parse_decls(idaapi.cvar.idati, str(cur_row['c_type']), None, 0)
+                indexed_types.add(cur_row['name'])
+
+            if purge_non_indexed:
+                orphaned_types = [x for x in LocalTypesIter() if x not in indexed_types]
+                for cur_orphan in orphaned_types:
+                    idaapi.del_named_type(
+                        idaapi.cvar.idati, cur_orphan, idaapi.NTF_TYPE | idaapi.NTF_SYMM
+                    )
+        finally:
+            self.project.ignore_changes = False
 
     def find_export(self, symbol):
+        """
+        Finds an exported symbol, returning either the desired info or `None`
+        if the symbol wasn't found in the index.
+        """
         cursor = self.db.cursor()
         cursor.execute("""
             SELECT e.id, b.idb_path FROM export e
