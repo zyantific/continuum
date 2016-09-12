@@ -35,7 +35,6 @@ from PyQt5.QtCore import QObject, pyqtSignal
 
 class Client(QObject, ProtoMixin, asyncore.dispatcher_with_send):
     client_analysis_state_updated = pyqtSignal([str, str])  # idb_path, state
-    refresh_project = pyqtSignal()
     sync_types = pyqtSignal([bool])  # purge_non_indexed
 
     def __init__(self, sock, core):
@@ -74,9 +73,6 @@ class Client(QObject, ProtoMixin, asyncore.dispatcher_with_send):
         print("[continuum] We were elected as host.")
         self.core.create_server_if_none()
 
-    def handle_msg_refresh_project(self, **_):
-        self.refresh_project.emit()
-
     def handle_msg_analysis_state_updated(self, client, state, **_):
         self.client_analysis_state_updated.emit(client, state)
 
@@ -104,9 +100,6 @@ class Client(QObject, ProtoMixin, asyncore.dispatcher_with_send):
             'kind': 'focus_instance',
             'idb_path': idb_path,
         })
-
-    def send_refresh_project(self):
-        self.send_packet({'kind': 'refresh_project'})
 
     def send_analysis_state(self, state):
         self.send_packet({

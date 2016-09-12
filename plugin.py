@@ -176,4 +176,3 @@ class Plugin(idaapi.plugin_t):
             return
 
         self.project_explorer.update()
-        self.core.client.send_refresh_project()

@@ -91,9 +91,6 @@ class ClientConnection(ProtoMixin, asyncore.dispatcher_with_send):
     def handle_msg_focus_instance(self, idb_path, **_):
         self.send_or_delay_packet(idb_path, {'kind': 'focus_instance'})
 
-    def handle_msg_refresh_project(self, **_):
-        self.broadcast_packet({'kind': 'refresh_project'})
-
     def handle_msg_update_analysis_state(self, state, **_):
         self.broadcast_packet({
             'kind': 'analysis_state_updated',
