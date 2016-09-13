@@ -35,12 +35,13 @@ from .project import Project
 
 
 class Plugin(idaapi.plugin_t):
+    """Core class for the plugin, registered into IDA."""
     flags = idaapi.PLUGIN_FIX
 
     comment = "Plugin adding multi-binary project support"
     help = comment
     wanted_name = "continuum"
-    wanted_hotkey = 'Alt-F9'
+    wanted_hotkey = None  # We don't need a hotkey.
 
     def __init__(self):
         super(Plugin, self).__init__()
@@ -50,6 +51,7 @@ class Plugin(idaapi.plugin_t):
         self.ui_hook = None
 
     def init(self):
+        """init callback, invoked by IDA when the plugin is loaded."""
         self.core = Continuum()
         zelf = self
 
@@ -80,9 +82,11 @@ class Plugin(idaapi.plugin_t):
         return idaapi.PLUGIN_KEEP
 
     def run(self, arg):
+        """run callback, invoked by IDA when the user clicks the plugin menu entry."""
         print("[continuum] No fancy action hidden here, yet!")
 
     def term(self):
+        """term callback, invoked by IDA when the plugin is unloaded."""
         if self.core.client:
             self.core.close_project()
 
@@ -91,6 +95,7 @@ class Plugin(idaapi.plugin_t):
         print("[continuum] Plugin unloaded.")
 
     def ui_init(self):
+        """Initializes the plugins interface extensions."""
         # Register menu entry. 
         # @HR: I really preferred the pre-6.5 mechanic.
         zelf = self
@@ -130,6 +135,7 @@ class Plugin(idaapi.plugin_t):
             self.subscribe_client_events(self.core.client)
 
     def create_proj_explorer(self, project):
+        """Creates the project explorer "sidebar" widget."""
         self.project_explorer = ProjectExplorerWidget(project)
         self.project_explorer.Show("continuum project")
         self.project_explorer.refresh_project_clicked.connect(self.refresh_project)
@@ -139,13 +145,16 @@ class Plugin(idaapi.plugin_t):
         idaapi.set_dock_pos("continuum project", "Functions window", idaapi.DP_BOTTOM)
 
     def close_proj_explorer(self):
+        """Removes the project explorer widget."""
         self.project_explorer.Close(0)
         self.project_explorer = None
 
     def subscribe_client_events(self, client):
+        """Subscribe to events of the `Client` instance."""
         client.sync_types.connect(self.core.project.index.sync_types_into_idb)
 
     def open_proj_creation_dialog(self):
+        """Performs sanity checks and pops up a project creation dialog, if applicable."""
         if self.core.client:
             print("[continuum] A project is already opened.")
             return
@@ -171,6 +180,7 @@ class Plugin(idaapi.plugin_t):
             self.core.open_project(project)
 
     def refresh_project(self, *_):
+        """Refreshes the project, scanning for new files etc.."""
         if not self.project_explorer:
             return
 

@@ -36,6 +36,7 @@ from .index import Index
 
 
 class Project(QObject):
+    """Represents a continuum project and it's properties."""
     META_DIR_NAME = '.continuum'
     CFG_FILE_NAME = 'project.conf'
 
@@ -82,6 +83,7 @@ class Project(QObject):
             self._analyze_project_files()
 
     def _analyze_project_files(self):
+        """Launches background analysis instances for binaries that aren't indexed yet."""
         plugin_root = os.path.dirname(os.path.realpath(__file__))
         procs = []
 
@@ -102,6 +104,7 @@ class Project(QObject):
 
     @staticmethod
     def file_to_idb(file):
+        """Obtains the IDB path for a binary."""
         return os.path.splitext(file)[0] + '.idb'
 
     @classmethod

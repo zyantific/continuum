@@ -33,6 +33,7 @@ from PyQt5.QtCore import QObject, pyqtSignal
 
 
 class ClientConnection(ProtoMixin, asyncore.dispatcher_with_send):
+    """Represents a client that is connected to the localhost server."""
     def __init__(self, sock, server):
         # We need to use old-style init calls here because asyncore 
         # consists of old-style classes :(
@@ -105,6 +106,10 @@ class ClientConnection(ProtoMixin, asyncore.dispatcher_with_send):
 
 
 class Server(asyncore.dispatcher):
+    """
+    The server for the localhost network, spawning and tracking
+    `ClientConnection` instances for all connected clients.
+    """
     def __init__(self, port, core):
         asyncore.dispatcher.__init__(self)
 
@@ -126,19 +131,27 @@ class Server(asyncore.dispatcher):
             ClientConnection(sock, self)
 
     def update_idb_client_map(self):
+        """Updates the IDB-Path -> Client map."""
         self.idb_client_map = {
             x.idb_path: x for x in self.clients if x.idb_path is not None
         }
 
     def queue_delayed_packet(self, idb_path, packet):
+        """Queues a delayed packet to be delivered to a client that isn't online, yet."""
         self._delayed_packets[idb_path].append(packet)
 
     def process_delayed_packets(self, client):
+        """Delivers pending delayed packets to a client that freshly became ready."""
         assert client.idb_path
         for cur_packet in self._delayed_packets[client.idb_path]:
             client.send_packet(cur_packet)
 
     def migrate_host_and_shutdown(self):
+        """
+        Orders another client to take over the host position in the network and shuts down.
+        As sockets tend to take several seconds before they fully close and free the used
+        port again, we select a fresh one before getting to work.
+        """
         # Any other client online? Migrate host.
         host_candidates = [x for x in self.clients if x.idb_path != self.core.client.idb_path]
         if host_candidates:

@@ -7,7 +7,7 @@ allowing fast navigation in applications involving many shared libraries.
 **This project is still work in progress and not suitable for production use.**
 
 ## Features
-- Allows quick navigation between many IDA instances
+- Quick navigation between many IDA instances
   - Project explorer widget in IDA's "sidebar"
   - Pressing `SHIFT + F` on an `extrn` symbol navigates to the instance where the symbol is defined
   - If required, new IDA instances are automatically spawned for IDBs with no instance open

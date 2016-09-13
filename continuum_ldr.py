@@ -22,6 +22,8 @@
     SOFTWARE.
 """
 
+# This file acts as a proxy, allowing the plugin to live in an extra directory.
+
 import sys
 import os
 

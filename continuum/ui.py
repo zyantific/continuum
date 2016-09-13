@@ -45,6 +45,7 @@ Ui_ProjectExplorerWidget, ProjectExplorerWidgetBase = uic.loadUiType(
 
 
 class ProjectCreationDialog(ProjectCreationDialogBase):
+    """Dialog allowing convenient project creation."""
     def __init__(self, initial_path=None):
         super(ProjectCreationDialog, self).__init__()
 
@@ -85,6 +86,7 @@ class ProjectCreationDialog(ProjectCreationDialogBase):
     
 
 class ProjectExplorerWidget(QObject, PluginForm):
+    """Project explorer widget, usually mounted to IDA's "sidebar"."""
     focus_instance_clicked = pyqtSignal([str])  # idb_path: str
     refresh_project_clicked = pyqtSignal()
     open_project_settings_clicked = pyqtSignal()

@@ -37,6 +37,10 @@ class ProtoMixin(object):
         self.recv_buf = bytearray()
 
     def handle_packet(self, packet):
+        """
+        Handles complete messages, invoking the corresponding `handle_msg_*` handler
+        based on the `kind` field in the packet.
+        """
         handler = getattr(self, 'handle_msg_' + packet['kind'], None)
         if handler is None:
             print("Received packet of unknown kind '{}'".format(packet['kind']))
@@ -54,6 +58,7 @@ class ProtoMixin(object):
             return
 
     def handle_read(self):
+        """Receives fresh data, performing TCP reassembly and JSON decoding."""
         self.recv_buf += self.recv(1500)
         if len(self.recv_buf) < self.NET_HDR_LEN:
             return
@@ -71,6 +76,7 @@ class ProtoMixin(object):
         self.recv_buf = self.recv_buf[packet_len + self.NET_HDR_LEN:]
 
     def send_packet(self, packet):
+        """Serializes data to JSON and sends it."""
         packet = json.dumps(packet).encode('utf8')
         self.send(struct.pack(self.NET_HDR_FORMAT, len(packet)))
         self.send(packet)

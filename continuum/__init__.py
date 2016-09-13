@@ -40,10 +40,15 @@ from .project import Project
 
 
 def launch_ida_gui_instance(idb_path):
+    """Launches a fresh IDA instance, opening the given IDB."""
     return subprocess.Popen([sys.executable, idb_path])
 
 
 class Continuum(QObject):
+    """
+    Plugin core class, providing functionality required for both, the
+    analysis stub and the full GUI instance version.
+    """
     project_opened = pyqtSignal([Project])
     project_closing = pyqtSignal()
     client_created = pyqtSignal([Client])
@@ -61,6 +66,7 @@ class Continuum(QObject):
         idaapi.notify_when(idaapi.NW_CLOSEIDB, self.handle_close_idb)
 
     def create_server_if_none(self):
+        """Creates a localhost server if none is alive, yet."""
         # Server alive?
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_port = self.read_or_generate_server_port()
@@ -74,6 +80,7 @@ class Continuum(QObject):
             sock.close()
 
     def create_client(self):
+        """Creates a client connecting to the localhost server."""
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_port = self.read_or_generate_server_port()
         try:
@@ -85,6 +92,7 @@ class Continuum(QObject):
             raise Exception("No server found")
 
     def enable_asyncore_loop(self):
+        """Hooks our asyncore loop into Qt's event queue."""
         def beat():
             asyncore.loop(count=1, timeout=0)
 
@@ -98,9 +106,11 @@ class Continuum(QObject):
         self._timer = timer
 
     def disable_asyncore_loop(self):
+        """Removes our asyncore loop from Qt's event queue."""
         self._timer = None
 
     def open_project(self, project):
+        """Performs operations required when a project is opened."""
         print("[continuum] Opening project.")
 
         self.project = project
@@ -111,6 +121,7 @@ class Continuum(QObject):
         self.project_opened.emit(project)
 
     def close_project(self):
+        """Performs clean-up work when a project is closed."""
         print("[continuum] Closing project.")
 
         self.project_closing.emit()
@@ -126,6 +137,7 @@ class Continuum(QObject):
         self.project = None
 
     def handle_open_idb(self, _, is_old_database):
+        """Performs start-up tasks when a new IDB is loaded."""
         # Is IDB part of a continuum project? Open it.
         proj_dir = Project.find_project_dir(GetIdbDir())
         if proj_dir:
@@ -135,10 +147,15 @@ class Continuum(QObject):
             project.index.sync_types_into_idb()
 
     def handle_close_idb(self, _):
+        """Handles the situation a user closes the current IDB."""
         if self.client:
             self.close_project()
 
     def read_or_generate_server_port(self, force_fresh=False):
+        """
+        Obtains the localhost server port. If the port isn't yet defined,
+        a random one is chosen and written to disk for other instances to read.
+        """
         server_port_file = os.path.join(self.project.meta_dir, 'server_port')
         if not force_fresh and os.path.exists(server_port_file):
             with open(server_port_file) as f:
@@ -150,6 +167,7 @@ class Continuum(QObject):
             return server_port
 
     def follow_extern(self):
+        """Follows the extern symbol under the cursor, if possible."""
         ea = ScreenEA()
         if GetSegmentAttr(ea, SEGATTR_TYPE) != SEG_XTRN:
             return
@@ -162,5 +180,6 @@ class Continuum(QObject):
 
 
 def PLUGIN_ENTRY():
+    """Entry point."""
     from .plugin import Plugin
     return Plugin()

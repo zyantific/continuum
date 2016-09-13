@@ -33,6 +33,7 @@ from PyQt5.QtCore import QObject, pyqtSignal
 
 
 class Client(QObject, ProtoMixin, asyncore.dispatcher_with_send):
+    """Client class for the localhost network."""
     client_analysis_state_updated = pyqtSignal([str, str])  # idb_path, state
     sync_types = pyqtSignal([bool])  # purge_non_indexed
 
