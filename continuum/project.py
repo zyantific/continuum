@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
     This file is part of the continuum IDA PRO plugin (see zyantific.com).
 
